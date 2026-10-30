@@ -3,12 +3,23 @@
 # dependencies
 node_modules/
 
+# Editor
+.vscode/
+.vscode
+
 # Expo
 .expo/
 dist/
 web-build/
 expo-env.d.ts
+
+# Test folder
 Test/
+Test
+
+# Xcode / Apple
+xcuserdata/
+*.xcuserstate
 
 # Native
 .kotlin/
