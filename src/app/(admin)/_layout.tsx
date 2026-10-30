@@ -1,24 +1,13 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect } from 'react';
+import { Redirect, Stack } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 
 export default function AdminLayout() {
-  const router = useRouter();
-  const segments = useSegments();
   const user = useAuthStore((state) => state.user);
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
 
-  useEffect(() => {
-    if (!hasHydrated) return;
-
-    if (!user || user.role !== 'admin') {
-      router.replace('/login');
-    }
-  }, [hasHydrated, user, router, segments]);
-
-  if (!hasHydrated || !user || user.role !== 'admin') {
+  if (!hasHydrated) {
     return (
       <View
         style={{
@@ -31,6 +20,18 @@ export default function AdminLayout() {
         <ActivityIndicator size="large" color="#0F766E" />
       </View>
     );
+  }
+
+  if (!user) {
+    return <Redirect href="/login" />;
+  }
+
+  if (user.role === 'doctor') {
+    return <Redirect href="/(doctor)" />;
+  }
+
+  if (user.role !== 'admin') {
+    return <Redirect href="/(tabs)" />;
   }
 
   return (

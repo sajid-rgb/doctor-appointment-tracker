@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
@@ -12,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { useDoctorStore } from '../../store/doctorStore';
@@ -44,6 +46,7 @@ export default function DoctorProfileScreen() {
   const [fee, setFee] = useState(doctor?.fee ? String(doctor.fee) : '');
   const [hospital, setHospital] = useState(doctor?.hospital || '');
   const [bio, setBio] = useState(doctor?.bio || '');
+  const [imageUri, setImageUri] = useState<string | undefined>(doctor?.image);
 
   const myAppointments = useMemo(
     () => appointments.filter((a) => a.doctorId === user?.id),
@@ -62,6 +65,113 @@ export default function DoctorProfileScreen() {
       ).length,
     [myAppointments]
   );
+
+  const savePhoto = (uri?: string) => {
+    setImageUri(uri);
+    if (doctor) {
+      updateDoctorProfile(doctor.id, { image: uri });
+      updateUserProfile({ image: uri });
+    }
+  };
+
+  const handlePickFromLibrary = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission Needed',
+          'Photo library access is needed to upload a profile photo.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        savePhoto(result.assets[0].uri);
+        Alert.alert(
+          'Photo Updated',
+          'Your profile photo has been successfully updated.'
+        );
+      }
+    } catch {
+      Alert.alert('Error', 'Unable to select image. Please try again.');
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission Needed',
+          'Camera access is needed to take a profile photo.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        savePhoto(result.assets[0].uri);
+        Alert.alert(
+          'Photo Updated',
+          'Your profile photo has been successfully updated.'
+        );
+      }
+    } catch {
+      Alert.alert('Error', 'Unable to capture photo. Please try again.');
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    savePhoto(undefined);
+    Alert.alert(
+      'Photo Removed',
+      'Your profile will now display the doctor medical icon.'
+    );
+  };
+
+  const showPhotoOptions = () => {
+    const currentPhoto = imageUri || doctor?.image;
+    const buttons: {
+      text: string;
+      onPress?: () => void;
+      style?: 'default' | 'cancel' | 'destructive';
+    }[] = [
+      { text: 'Choose from Library', onPress: handlePickFromLibrary },
+    ];
+
+    if (Platform.OS !== 'web') {
+      buttons.unshift({ text: 'Take Photo', onPress: handleTakePhoto });
+    }
+
+    if (currentPhoto) {
+      buttons.push({
+        text: 'Remove Photo (Use Doctor Icon)',
+        style: 'destructive',
+        onPress: handleRemovePhoto,
+      });
+    }
+
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+
+    Alert.alert(
+      'Doctor Profile Photo',
+      'Add or update your photo. If no photo is selected, the doctor medical icon will be displayed.',
+      buttons
+    );
+  };
 
   if (!user || user.role !== 'doctor') {
     return (
@@ -90,6 +200,7 @@ export default function DoctorProfileScreen() {
     setFee(doctor.fee ? String(doctor.fee) : '');
     setHospital(doctor.hospital || '');
     setBio(doctor.bio || '');
+    setImageUri(doctor.image);
     setIsEditing(true);
   };
 
@@ -131,6 +242,7 @@ export default function DoctorProfileScreen() {
     updateDoctorProfile(doctor.id, {
       name: trimmedName,
       phone: phone.trim() || undefined,
+      image: imageUri,
       specialty: specialty.trim(),
       qualification: qualification.trim(),
       experience: Number.isNaN(expNum) ? 0 : expNum,
@@ -143,6 +255,7 @@ export default function DoctorProfileScreen() {
     updateUserProfile({
       name: trimmedName,
       phone: phone.trim() || undefined,
+      image: imageUri,
     });
 
     setIsEditing(false);
@@ -185,10 +298,39 @@ export default function DoctorProfileScreen() {
       >
         {/* Header Card */}
         <View style={styles.headerCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {doctor.name.charAt(0).toUpperCase()}
-            </Text>
+          <View style={styles.avatarContainer}>
+            <TouchableOpacity
+              style={styles.avatarButton}
+              activeOpacity={0.8}
+              onPress={showPhotoOptions}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile picture"
+            >
+              <DoctorAvatar
+                image={doctor.image}
+                name={doctor.name}
+                size={88}
+                borderRadius={44}
+              />
+              <View style={styles.cameraBadge}>
+                <Ionicons name="camera" size={15} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.avatarActionTextBtn}
+              onPress={showPhotoOptions}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={doctor.image ? 'camera-outline' : 'add-circle-outline'}
+                size={14}
+                color="#0F766E"
+              />
+              <Text style={styles.avatarActionText}>
+                {doctor.image ? 'Change Photo' : 'Upload Photo (or Use Icon)'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <Text style={styles.doctorName}>{doctor.name}</Text>
@@ -267,6 +409,48 @@ export default function DoctorProfileScreen() {
           {isEditing ? (
             /* ================= EDIT MODE ================= */
             <View style={styles.form}>
+              {/* Doctor Avatar Picker in Edit Form */}
+              <View style={styles.photoEditSection}>
+                <DoctorAvatar
+                  image={imageUri || doctor.image}
+                  name={name || doctor.name}
+                  size={64}
+                  borderRadius={32}
+                />
+                <View style={styles.photoEditInfo}>
+                  <Text style={styles.photoEditTitle}>
+                    {imageUri ? 'Doctor Photo Set' : 'Doctor Medical Icon'}
+                  </Text>
+                  <Text style={styles.photoEditSubtitle}>
+                    {imageUri
+                      ? 'Photo is displayed across search & bookings'
+                      : 'Standard doctor icon is used when no photo is uploaded'}
+                  </Text>
+                  <View style={styles.photoEditButtons}>
+                    <TouchableOpacity
+                      style={styles.photoBtnSmall}
+                      onPress={showPhotoOptions}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="camera-outline" size={13} color="#0F766E" />
+                      <Text style={styles.photoBtnSmallText}>
+                        {imageUri ? 'Change Photo' : 'Add Photo'}
+                      </Text>
+                    </TouchableOpacity>
+                    {Boolean(imageUri) && (
+                      <TouchableOpacity
+                        style={styles.photoRemoveBtnSmall}
+                        onPress={handleRemovePhoto}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="trash-outline" size={13} color="#DC2626" />
+                        <Text style={styles.photoRemoveBtnSmallText}>Use Icon</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </View>
+
               <View style={styles.formGroup}>
                 <Text style={styles.fieldLabel}>Doctor Full Name *</Text>
                 <TextInput
@@ -434,6 +618,16 @@ export default function DoctorProfileScreen() {
               </View>
 
               <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Profile Display</Text>
+                <View style={styles.photoStatusRow}>
+                  <DoctorAvatar image={doctor.image} name={doctor.name} size={30} />
+                  <Text style={styles.photoStatusText}>
+                    {doctor.image ? 'Custom Photo Active' : 'Doctor Medical Icon (Standard)'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Hospital / Clinic</Text>
                 <Text style={styles.infoValue}>
                   {doctor.hospital || 'CarePoint Medical Center'}
@@ -522,6 +716,116 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  avatarContainer: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  avatarButton: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#0F766E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  avatarActionTextBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#F0FDFA',
+  },
+  avatarActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  photoEditSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  photoEditInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  photoEditTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  photoEditSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 15,
+  },
+  photoEditButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  photoBtnSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  photoBtnSmallText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  photoRemoveBtnSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  photoRemoveBtnSmallText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  photoStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  photoStatusText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
   },
   avatar: {
     width: 76,

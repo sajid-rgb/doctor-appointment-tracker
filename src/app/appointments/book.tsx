@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 
 import * as DocumentPicker from 'expo-document-picker';
+import { DoctorAvatar } from '../../components/DoctorAvatar';
 import {
   type AvailabilitySettings,
   DEFAULT_AVAILABILITY,
@@ -22,6 +23,7 @@ import {
   getDoctorAvailabilityKey,
   getWeekdayName,
   isSlotInPast,
+  sortTimeSlots,
 } from '../../constants/availability';
 import {
   type UploadedPrescriptionFile,
@@ -30,6 +32,10 @@ import {
 } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { useDoctorStore } from '../../store/doctorStore';
+import {
+  notifyDoctorNewAppointment,
+  schedulePatientAppointmentReminder,
+} from '../../utils/notifications';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
 
 function formatFileSize(bytes?: number): string {
@@ -68,6 +74,7 @@ export default function BookAppointmentScreen() {
   }>();
 
   const user = useAuthStore((state) => state.user);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const updateUserProfile = useAuthStore((state) => state.updateUserProfile);
   const doctors = useDoctorStore((state) => state.doctors);
   const updateDoctorAvailability = useDoctorStore(
@@ -84,6 +91,25 @@ export default function BookAppointmentScreen() {
   const [loadingAvailability, setLoadingAvailability] = useState(
     !doctor?.availability
   );
+
+  if (!hasHydrated) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#F8FAFC',
+        }}
+      >
+        <ActivityIndicator size="large" color="#0F766E" />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <Redirect href="/login" />;
+  }
 
   // Load availability dynamically from doctorStore or AsyncStorage
   useEffect(() => {
@@ -248,13 +274,14 @@ export default function BookAppointmentScreen() {
     );
   }, [availability, selectedDayOfWeek]);
 
-  // Filter out any slot that has already passed for the selected date
+  // Filter out any slot that has already passed for the selected date and sort chronologically
   const dynamicSlots = useMemo(() => {
     if (!availability.acceptingAppointments || !selectedDaySchedule?.enabled) {
       return [];
     }
     const rawSlots = selectedDaySchedule.slots ?? [];
-    return rawSlots.filter((slot) => !isSlotInPast(selectedDate, slot));
+    const validFutureSlots = rawSlots.filter((slot) => !isSlotInPast(selectedDate, slot));
+    return sortTimeSlots(validFutureSlots);
   }, [availability.acceptingAppointments, selectedDaySchedule, selectedDate]);
 
   const isDayEnabled = Boolean(
@@ -307,7 +334,7 @@ export default function BookAppointmentScreen() {
     );
   }
 
-  const handleBooking = () => {
+  const handleBooking = async () => {
     if (!user || user.role !== 'patient') {
       Alert.alert(
         'Patient account required',
@@ -421,6 +448,28 @@ export default function BookAppointmentScreen() {
         bloodGroup: bloodGroup.trim(),
       });
 
+      // 1. Immediately notify the doctor about new appointment
+      await notifyDoctorNewAppointment({
+        doctorId: doctor.id,
+        doctorName: doctor.name,
+        patientName: user.name,
+        date: selectedDate,
+        time: selectedTime,
+        serialNumber: created.serialNumber,
+        appointmentId: created.id,
+      });
+
+      // 2. Schedule patient notification 10 minutes before the appointment time
+      await schedulePatientAppointmentReminder({
+        patientId: user.id,
+        patientName: user.name,
+        doctorName: doctor.name,
+        date: selectedDate,
+        time: selectedTime,
+        serialNumber: created.serialNumber,
+        appointmentId: created.id,
+      });
+
       Alert.alert(
         '🎉 Booking Confirmed!',
         `Your appointment is confirmed!\n\n🎟️ Serial Number: ${created.serialNumber}\n👨‍⚕️ Doctor: ${doctor.name}\n📅 Date: ${selectedDate} (${selectedTime})\n\nSend confirmation slip to WhatsApp?`,
@@ -474,9 +523,12 @@ export default function BookAppointmentScreen() {
 
       {/* Doctor Card */}
       <View style={styles.doctorCard}>
-        <View style={styles.avatar}>
-          <Ionicons name="person" size={34} color="#0F766E" />
-        </View>
+        <DoctorAvatar
+          image={doctor.image}
+          name={doctor.name}
+          size={58}
+          borderRadius={18}
+        />
 
         <View style={styles.doctorInfo}>
           <Text style={styles.doctorName}>{doctor.name}</Text>
@@ -573,6 +625,21 @@ export default function BookAppointmentScreen() {
 
           {/* Select Time (Dynamic from doctor's availability schedule) */}
           <Text style={styles.sectionTitle}>Select Time Slot</Text>
+
+          <View style={styles.slotIndicatorRow}>
+            <View style={styles.slotIndicatorBadge}>
+              <Ionicons name="time-outline" size={13} color="#0F766E" />
+              <Text style={styles.slotIndicatorBadgeText}>15-Min Slots</Text>
+            </View>
+            <View style={styles.slotIndicatorBadge}>
+              <Ionicons name="person-outline" size={13} color="#0F766E" />
+              <Text style={styles.slotIndicatorBadgeText}>1 Patient per Slot</Text>
+            </View>
+            <View style={styles.slotIndicatorBadge}>
+              <Ionicons name="moon-outline" size={13} color="#0F766E" />
+              <Text style={styles.slotIndicatorBadgeText}>3:00 PM – 10:00 PM</Text>
+            </View>
+          </View>
 
           {dynamicSlots.length === 0 ? (
             <View style={styles.noSlotsBox}>
@@ -1184,6 +1251,29 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: '#0F172A',
+  },
+  slotIndicatorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  slotIndicatorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F0FDFA',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+  },
+  slotIndicatorBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F766E',
   },
   dayBadge: {
     backgroundColor: '#CCFBF1',

@@ -13,6 +13,7 @@ export type DoctorProfile = {
   name: string;
   email: string;
   phone?: string;
+  image?: string;
   specialty: string;
   qualification: string;
   experience: number;
@@ -36,6 +37,7 @@ type DoctorState = {
         DoctorProfile,
         | 'name'
         | 'phone'
+        | 'image'
         | 'specialty'
         | 'qualification'
         | 'experience'

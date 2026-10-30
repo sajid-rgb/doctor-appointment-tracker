@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs, useRouter } from 'expo-router';
-import { Pressable } from 'react-native';
+import { Redirect, Tabs, useRouter } from 'expo-router';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NotificationBell } from '../../components/NotificationBell';
 import { useAuthStore } from '../../store/authStore';
 
 const colors = {
@@ -13,12 +14,41 @@ const colors = {
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const logout = useAuthStore((state) => state.logout);
 
   const handleLogout = () => {
     logout();
     router.replace('/login');
   };
+
+  if (!hasHydrated) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#FFFFFF',
+        }}
+      >
+        <ActivityIndicator size="large" color="#0F766E" />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <Redirect href="/login" />;
+  }
+
+  if (user.role === 'doctor') {
+    return <Redirect href="/(doctor)" />;
+  }
+
+  if (user.role === 'admin') {
+    return <Redirect href="/dashboard" />;
+  }
 
   return (
     <Tabs
@@ -30,13 +60,15 @@ export default function TabLayout() {
           color: '#0F172A',
         },
         headerRight: () => (
-          <Pressable
-            onPress={handleLogout}
-            hitSlop={12}
-            style={{ marginRight: 16 }}
-          >
-            <Ionicons name="log-out-outline" size={24} color={colors.primary} />
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
+            <NotificationBell color={colors.primary} />
+            <Pressable
+              onPress={handleLogout}
+              hitSlop={12}
+            >
+              <Ionicons name="log-out-outline" size={24} color={colors.primary} />
+            </Pressable>
+          </View>
         ),
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.inactive,

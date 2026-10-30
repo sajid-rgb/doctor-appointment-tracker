@@ -3,13 +3,16 @@ import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
+import { useDoctorStore } from '../../store/doctorStore';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const appointments = useAppointmentStore((state) => state.appointments);
+  const doctors = useDoctorStore((state) => state.doctors);
 
   const myAppointments = useMemo(() => {
     if (user?.role === 'patient') {
@@ -108,12 +111,18 @@ export default function DashboardScreen() {
         recentAppointments.map((item) => {
           const isCompleted = item.status === 'completed';
           const isCancelled = item.status === 'cancelled';
+          const doctor = doctors.find(
+            (d) => d.id === item.doctorId || d.name === item.doctorName
+          );
 
           return (
             <View key={item.id} style={styles.appointmentCard}>
-              <View style={styles.patientAvatar}>
-                <Ionicons name="medical" size={20} color="#0369A1" />
-              </View>
+              <DoctorAvatar
+                image={doctor?.image}
+                name={item.doctorName}
+                size={42}
+                borderRadius={13}
+              />
 
               <View style={styles.patientInfo}>
                 <Text style={styles.patientName}>{item.doctorName}</Text>

@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useDoctorStore } from '../../store/doctorStore';
 
 export default function DoctorsScreen() {
@@ -103,9 +104,12 @@ export default function DoctorsScreen() {
         }
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <View style={styles.avatar}>
-              <Ionicons name="person" size={30} color="#0F766E" />
-            </View>
+            <DoctorAvatar
+              image={item.image}
+              name={item.name}
+              size={56}
+              borderRadius={16}
+            />
 
             <View style={styles.info}>
               <Text style={styles.name}>{item.name}</Text>

@@ -1,8 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
+import { useDoctorStore } from '../../store/doctorStore';
 
 const TEAL = '#0F766E';
 
@@ -126,8 +135,11 @@ function getAppointmentTimestamp(date: string, time: string) {
 }
 
 export default function DoctorDashboard() {
+  const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const appointments = useAppointmentStore((state) => state.appointments);
+  const doctors = useDoctorStore((state) => state.doctors);
+  const currentDoctor = doctors.find((d) => d.id === user?.id);
 
   const today = new Date();
   const todayStart = new Date(
@@ -207,9 +219,19 @@ export default function DoctorDashboard() {
           </Text>
         </View>
 
-        <View style={styles.avatar}>
-          <Ionicons name="person" size={26} color={TEAL} />
-        </View>
+        <TouchableOpacity
+          onPress={() => router.push('/(doctor)/profile')}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Open doctor profile"
+        >
+          <DoctorAvatar
+            image={currentDoctor?.image || user?.image}
+            name={user?.name}
+            size={52}
+            borderRadius={18}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* Summary cards */}

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs, useRouter } from 'expo-router';
-import { Pressable } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NotificationBell } from '../../components/NotificationBell';
 import { useAuthStore } from '../../store/authStore';
 
 export default function DoctorLayout() {
@@ -12,11 +13,26 @@ export default function DoctorLayout() {
   const insets = useSafeAreaInsets();
 
   if (!hasHydrated) {
-    return null;
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#FFFFFF',
+        }}
+      >
+        <ActivityIndicator size="large" color="#0F766E" />
+      </View>
+    );
   }
 
   if (!user) {
     return <Redirect href="/login" />;
+  }
+
+  if (user.role === 'admin') {
+    return <Redirect href="/dashboard" />;
   }
 
   if (user.role !== 'doctor') {
@@ -37,16 +53,18 @@ export default function DoctorLayout() {
           paddingBottom: Math.max(insets.bottom, 8),
         },
         headerRight: () => (
-          <Pressable
-            onPress={() => {
-              logout();
-              router.replace('/login');
-            }}
-            hitSlop={12}
-            style={{ marginRight: 16 }}
-          >
-            <Ionicons name="log-out-outline" size={24} color="#0F766E" />
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
+            <NotificationBell color="#0F766E" />
+            <Pressable
+              onPress={() => {
+                logout();
+                router.replace('/login');
+              }}
+              hitSlop={12}
+            >
+              <Ionicons name="log-out-outline" size={24} color="#0F766E" />
+            </Pressable>
+          </View>
         ),
       }}
     >

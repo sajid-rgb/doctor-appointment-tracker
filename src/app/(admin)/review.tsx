@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { DoctorApprovalStatus, useDoctorStore } from '../../store/doctorStore';
 
 type FilterType = 'all' | DoctorApprovalStatus;
@@ -54,9 +55,12 @@ export default function DoctorReviewScreen() {
   const renderDoctor = ({ item }: { item: (typeof doctors)[number] }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <View style={styles.avatar}>
-          <Ionicons name="person" size={24} color="#0F766E" />
-        </View>
+        <DoctorAvatar
+          image={item.image}
+          name={item.name}
+          size={48}
+          borderRadius={14}
+        />
         <View style={styles.doctorInfo}>
           <Text style={styles.doctorName}>{item.name}</Text>
           <Text style={styles.specialty}>{item.specialty}</Text>

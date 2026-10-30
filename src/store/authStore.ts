@@ -10,6 +10,7 @@ export type AuthUser = {
   name: string;
   email: string;
   role: UserRole;
+  image?: string;
   phone?: string;
   age?: number;
   gender?: string;
@@ -40,6 +41,7 @@ type AuthState = {
       Pick<
         AuthUser,
         | 'name'
+        | 'image'
         | 'phone'
         | 'age'
         | 'gender'

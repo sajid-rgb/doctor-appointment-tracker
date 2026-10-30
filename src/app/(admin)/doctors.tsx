@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useDoctorStore } from '../../store/doctorStore';
 
 export default function AdminDoctorsScreen() {
@@ -46,11 +47,22 @@ export default function AdminDoctorsScreen() {
         }
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <Text style={styles.name}>{item.name}</Text>
+            <View style={styles.cardHeader}>
+              <DoctorAvatar
+                image={item.image}
+                name={item.name}
+                size={46}
+                borderRadius={14}
+              />
+              <View style={styles.headerInfo}>
+                <Text style={styles.name}>{item.name}</Text>
+                <Text style={styles.specialty}>{item.specialty}</Text>
+              </View>
+            </View>
+
             <Text style={styles.detail}>{item.email}</Text>
-            <Text style={styles.detail}>Specialty: {item.specialty}</Text>
             <Text style={styles.detail}>
-              Qualification: {item.qualification}
+              Qualification: {item.qualification || 'Not provided'}
             </Text>
             <Text style={styles.detail}>
               Experience: {item.experience} years
@@ -90,7 +102,20 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 14,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  headerInfo: {
+    flex: 1,
+  },
   name: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
+  specialty: { fontSize: 13, color: '#0F766E', fontWeight: '600', marginTop: 2 },
   detail: { color: '#475569', marginTop: 7 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 16 },
   button: {

@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,6 +14,7 @@ import {
   View,
 } from 'react-native';
 
+import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useAuthStore, type UserRole } from '../../store/authStore';
 import { useDoctorStore } from '../../store/doctorStore';
 
@@ -41,10 +44,38 @@ export default function SignupScreen() {
   const [experience, setExperience] = useState('0');
   const [fee, setFee] = useState('500');
   const [bio, setBio] = useState('');
+  const [doctorImage, setDoctorImage] = useState<string | undefined>(undefined);
 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const handlePickDoctorPhoto = async () => {
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission Needed',
+          'Photo library access is required to select a profile photo.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setDoctorImage(result.assets[0].uri);
+      }
+    } catch {
+      Alert.alert('Error', 'Unable to select image. Please try again.');
+    }
+  };
 
   const handleSignup = () => {
     if (loading) return;
@@ -125,12 +156,17 @@ export default function SignupScreen() {
           id: createdUser.id,
           name: createdUser.name,
           email: createdUser.email,
+          image: doctorImage,
           specialty,
           qualification: qualification.trim(),
           experience: Number(experience),
           fee: Number(fee),
           bio: bio.trim(),
         });
+
+        if (doctorImage) {
+          useAuthStore.getState().updateUserProfile({ image: doctorImage });
+        }
       }
 
       router.replace('/');
@@ -284,6 +320,46 @@ export default function SignupScreen() {
                 Your profile will remain pending until it is reviewed by an
                 administrator.
               </Text>
+
+              {/* Doctor Avatar Picker (Photo or Medical Icon) */}
+              <View style={styles.photoPickerBox}>
+                <DoctorAvatar
+                  image={doctorImage}
+                  name={name}
+                  size={64}
+                  borderRadius={32}
+                />
+                <View style={styles.photoPickerInfo}>
+                  <Text style={styles.photoPickerTitle}>
+                    {doctorImage ? 'Profile Photo Selected' : 'Doctor Photo (Optional)'}
+                  </Text>
+                  <Text style={styles.photoPickerSubtitle}>
+                    {doctorImage
+                      ? 'Custom photo will be shown to patients'
+                      : 'Upload a picture, or leave empty to use standard doctor icon'}
+                  </Text>
+                  <View style={styles.photoPickerActions}>
+                    <Pressable
+                      style={styles.photoPickerBtn}
+                      onPress={handlePickDoctorPhoto}
+                    >
+                      <Ionicons name="camera-outline" size={13} color="#0F766E" />
+                      <Text style={styles.photoPickerBtnText}>
+                        {doctorImage ? 'Change Photo' : 'Select Photo'}
+                      </Text>
+                    </Pressable>
+                    {Boolean(doctorImage) && (
+                      <Pressable
+                        style={styles.photoPickerRemoveBtn}
+                        onPress={() => setDoctorImage(undefined)}
+                      >
+                        <Ionicons name="close-circle-outline" size={13} color="#DC2626" />
+                        <Text style={styles.photoPickerRemoveBtnText}>Use Icon</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                </View>
+              </View>
 
               <Text style={styles.label}>Medical specialty *</Text>
               <View style={styles.specialtyContainer}>
@@ -603,5 +679,64 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 11,
     marginTop: 28,
+  },
+  photoPickerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  photoPickerInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  photoPickerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  photoPickerSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 15,
+  },
+  photoPickerActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  photoPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  photoPickerBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  photoPickerRemoveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  photoPickerRemoveBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
   },
 });

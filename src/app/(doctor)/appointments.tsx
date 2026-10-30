@@ -16,6 +16,7 @@ import type {
 } from '../../store/appointmentStore';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
+import { useNotificationStore } from '../../store/notificationStore';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
 
 function formatFileSize(bytes?: number): string {
@@ -71,6 +72,30 @@ export default function DoctorAppointmentsScreen() {
         text: 'Confirm',
         onPress: () => {
           updateStatus(appointment.id, status);
+
+          if (appointment.patientId) {
+            useNotificationStore.getState().addNotification({
+              recipientId: appointment.patientId,
+              recipientRole: 'patient',
+              title:
+                status === 'confirmed'
+                  ? 'Appointment Confirmed 🎉'
+                  : status === 'completed'
+                    ? 'Appointment Completed ✅'
+                    : 'Appointment Rejected ❌',
+              message: `Your appointment with Dr. ${appointment.doctorName} on ${appointment.date} at ${appointment.time} (Serial: ${appointment.serialNumber}) was marked as ${status}.`,
+              type:
+                status === 'rejected'
+                  ? 'appointment_cancelled'
+                  : 'patient_booking_confirmation',
+              appointmentId: appointment.id,
+              doctorName: appointment.doctorName,
+              patientName: appointment.patientName,
+              date: appointment.date,
+              time: appointment.time,
+              serialNumber: appointment.serialNumber,
+            });
+          }
 
           if (status === 'confirmed') {
             Alert.alert(

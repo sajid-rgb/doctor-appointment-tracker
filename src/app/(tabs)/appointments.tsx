@@ -18,6 +18,9 @@ import {
   type Appointment,
   type AppointmentStatus,
 } from '../../store/appointmentStore';
+import { DoctorAvatar } from '../../components/DoctorAvatar';
+import { useDoctorStore } from '../../store/doctorStore';
+import { useNotificationStore } from '../../store/notificationStore';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
 
 function formatFileSize(bytes?: number): string {
@@ -169,6 +172,7 @@ function StatusBadge({ status }: { status: AppointmentStatus }) {
 
 export default function PatientAppointmentsScreen() {
   const appointments = useAppointmentStore((state) => state.appointments);
+  const doctors = useDoctorStore((state) => state.doctors);
 
   const cancelAppointment = useAppointmentStore(
     (state) => state.cancelAppointment
@@ -244,7 +248,43 @@ export default function PatientAppointmentsScreen() {
         {
           text: 'Cancel appointment',
           style: 'destructive',
-          onPress: () => cancelAppointment(appointment.id),
+          onPress: () => {
+            cancelAppointment(appointment.id);
+
+            // Specifically notify the doctor of this appointment
+            if (appointment.doctorId) {
+              useNotificationStore.getState().addNotification({
+                recipientId: appointment.doctorId,
+                recipientRole: 'doctor',
+                title: 'Appointment Cancelled 🚫',
+                message: `Patient ${appointment.patientName || 'Patient'} cancelled consultation for ${appointment.date} at ${appointment.time}. Serial: ${appointment.serialNumber}.`,
+                type: 'appointment_cancelled',
+                appointmentId: appointment.id,
+                doctorName: appointment.doctorName,
+                patientName: appointment.patientName,
+                date: appointment.date,
+                time: appointment.time,
+                serialNumber: appointment.serialNumber,
+              });
+            }
+
+            // Specifically notify the patient of this appointment
+            if (appointment.patientId) {
+              useNotificationStore.getState().addNotification({
+                recipientId: appointment.patientId,
+                recipientRole: 'patient',
+                title: 'Appointment Cancelled 🚫',
+                message: `Your appointment with Dr. ${appointment.doctorName} on ${appointment.date} at ${appointment.time} (Serial: ${appointment.serialNumber}) was cancelled.`,
+                type: 'appointment_cancelled',
+                appointmentId: appointment.id,
+                doctorName: appointment.doctorName,
+                patientName: appointment.patientName,
+                date: appointment.date,
+                time: appointment.time,
+                serialNumber: appointment.serialNumber,
+              });
+            }
+          },
         },
       ]
     );
@@ -252,13 +292,19 @@ export default function PatientAppointmentsScreen() {
 
   const renderAppointment = ({ item }: { item: Appointment }) => {
     const canCancel = item.status === 'pending' || item.status === 'confirmed';
+    const doctor = doctors.find(
+      (d) => d.id === item.doctorId || d.name === item.doctorName
+    );
 
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View style={styles.doctorIcon}>
-            <Ionicons name="person" size={24} color="#0F766E" />
-          </View>
+          <DoctorAvatar
+            image={doctor?.image}
+            name={item.doctorName}
+            size={46}
+            borderRadius={14}
+          />
 
           <View style={styles.doctorInfo}>
             <View style={styles.doctorNameRow}>

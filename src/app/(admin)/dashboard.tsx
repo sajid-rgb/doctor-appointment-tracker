@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { NotificationBell } from '../../components/NotificationBell';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { useDoctorStore } from '../../store/doctorStore';
@@ -66,10 +67,13 @@ export default function AdminDashboard() {
             <Text style={styles.headerSubtitle}>Admin Panel</Text>
           </View>
 
-          <Pressable style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={19} color="#DC2626" />
-            <Text style={styles.logoutText}>Logout</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <NotificationBell color="#0F766E" />
+            <Pressable style={styles.logoutButton} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={19} color="#DC2626" />
+              <Text style={styles.logoutText}>Logout</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.welcome}>
