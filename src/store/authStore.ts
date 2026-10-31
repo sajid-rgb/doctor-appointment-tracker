@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged } from 'firebase/auth';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -18,6 +19,29 @@ import {
 
 export const AUTH_TOKEN_STORAGE_KEY = 'carepoint_auth_token';
 const ADMIN_SESSION_TOKEN = 'carepoint-admin-session-token';
+
+export const safeAsyncStorage = {
+  getItem: async (key: string): Promise<string | null> => {
+    try {
+      if (Platform.OS === 'web' && typeof window === 'undefined') return null;
+      return await AsyncStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    try {
+      if (Platform.OS === 'web' && typeof window === 'undefined') return;
+      await AsyncStorage.setItem(key, value);
+    } catch {}
+  },
+  removeItem: async (key: string): Promise<void> => {
+    try {
+      if (Platform.OS === 'web' && typeof window === 'undefined') return;
+      await AsyncStorage.removeItem(key);
+    } catch {}
+  },
+};
 
 export type UserRole = 'patient' | 'doctor' | 'admin';
 type SignUpRole = 'patient' | 'doctor';
@@ -118,9 +142,9 @@ export const useAuthStore = create<AuthState>()(
       setToken: (token) => {
         set({ token });
         if (token) {
-          AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token).catch(() => {});
+          safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token).catch(() => {});
         } else {
-          AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY).catch(() => {});
+          safeAsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY).catch(() => {});
         }
       },
 
@@ -166,7 +190,7 @@ export const useAuthStore = create<AuthState>()(
           token: authToken,
         }));
 
-        AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
+        safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
         attachCurrentUserListener(newUser.id);
         return null;
       },
@@ -179,7 +203,7 @@ export const useAuthStore = create<AuthState>()(
           const { password: _password, ...safeAdmin } = demoAdmin;
           const authToken = ADMIN_SESSION_TOKEN;
           set({ user: safeAdmin, token: authToken });
-          AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
+          safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
           return null;
         }
 
@@ -199,7 +223,7 @@ export const useAuthStore = create<AuthState>()(
             const { password: _password, ...safeUser } = localAccount;
             const authToken = safeUser.id;
             set({ user: safeUser, token: authToken });
-            AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
+            safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
             return null;
           }
 
@@ -220,7 +244,7 @@ export const useAuthStore = create<AuthState>()(
             : [...state.users, loggedInUser],
         }));
 
-        AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
+        safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
         attachCurrentUserListener(loggedInUser.id);
         return null;
       },
@@ -254,7 +278,7 @@ export const useAuthStore = create<AuthState>()(
           unsubscribeCurrentUser = null;
         }
         logoutFirebase().catch(() => {});
-        AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY).catch(() => {});
+        safeAsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY).catch(() => {});
         set({ user: null, token: null });
       },
 
@@ -277,7 +301,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'carepoint-demo-auth',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => safeAsyncStorage),
       partialize: (state) => ({
         // Note: As requested, ONLY the auth token is stored in AsyncStorage!
         // All user profiles, doctors, patients, and appointments are stored in Cloud Firestore API.
@@ -285,7 +309,7 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => async (state) => {
         // Read persisted token
-        const persistedToken = state?.token || (await AsyncStorage.getItem(AUTH_TOKEN_STORAGE_KEY));
+        const persistedToken = state?.token || (await safeAsyncStorage.getItem(AUTH_TOKEN_STORAGE_KEY));
 
         if (persistedToken === ADMIN_SESSION_TOKEN) {
           const { password: _password, ...safeAdmin } = demoAdmin;
@@ -312,14 +336,14 @@ export const useAuthStore = create<AuthState>()(
               hasHydrated: true,
             });
 
-            AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token).catch(() => {});
+            safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token).catch(() => {});
             attachCurrentUserListener(resolvedUser.id);
           } else {
             // No active Firebase session
             const currentToken = useAuthStore.getState().token;
             if (currentToken && currentToken !== ADMIN_SESSION_TOKEN) {
               useAuthStore.setState({ user: null, token: null });
-              AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY).catch(() => {});
+              safeAsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY).catch(() => {});
             }
             useAuthStore.setState({ hasHydrated: true });
           }
