@@ -12,6 +12,7 @@ import { useDoctorStore } from '../../store/doctorStore';
 export default function AdminDoctorsScreen() {
   const doctors = useDoctorStore((state) => state.doctors);
   const updateStatus = useDoctorStore((state) => state.updateApprovalStatus);
+  const deleteDoctor = useDoctorStore((state) => state.deleteDoctor);
 
   const pendingDoctors = doctors.filter(
     (doctor) => doctor.approvalStatus === 'pending'
@@ -20,12 +21,33 @@ export default function AdminDoctorsScreen() {
   const reviewDoctor = (id: string, status: 'approved' | 'rejected') => {
     Alert.alert(
       status === 'approved' ? 'Approve doctor?' : 'Reject doctor?',
-      'This changes the doctor profile status in local demo storage.',
+      `Are you sure you want to ${status === 'approved' ? 'approve' : 'reject'} this doctor profile?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Confirm',
           onPress: () => updateStatus(id, status),
+        },
+      ]
+    );
+  };
+
+  const deleteDoctorAction = (id: string, name: string) => {
+    Alert.alert(
+      'Delete Doctor',
+      `Are you sure you want to permanently delete Dr. ${name}? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoctor(id);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Failed to delete doctor');
+            }
+          },
         },
       ]
     );
@@ -82,6 +104,12 @@ export default function AdminDoctorsScreen() {
               >
                 <Text style={styles.buttonText}>Reject</Text>
               </Pressable>
+              <Pressable
+                style={[styles.button, styles.delete]}
+                onPress={() => deleteDoctorAction(item.id, item.name)}
+              >
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              </Pressable>
             </View>
           </View>
         )}
@@ -126,6 +154,12 @@ const styles = StyleSheet.create({
   },
   approve: { backgroundColor: '#0F766E' },
   reject: { backgroundColor: '#DC2626' },
+  delete: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
   buttonText: { color: '#FFFFFF', fontWeight: '700' },
+  deleteButtonText: { color: '#DC2626', fontWeight: '700' },
   empty: { color: '#64748B', paddingVertical: 30, textAlign: 'center' },
 });

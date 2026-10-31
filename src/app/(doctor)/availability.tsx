@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,10 +16,8 @@ import {
   type AvailabilitySettings,
   DAYS_OF_WEEK,
   DEFAULT_AVAILABILITY,
-  DOCTOR_AVAILABILITY_STORAGE_KEY,
   EVENING_SLOTS_3PM_10PM,
   generateTimeSlots,
-  getDoctorAvailabilityKey,
   MAX_PATIENTS_PER_SLOT,
   MORNING_SLOTS,
   normalizeTimeString,
@@ -66,45 +63,12 @@ export default function DoctorAvailabilityScreen() {
   useEffect(() => {
     let mounted = true;
 
-    async function loadSettings() {
-      try {
-        if (currentDoctor?.availability) {
-          if (mounted) {
-            setSettings(currentDoctor.availability);
-            setLoading(false);
-          }
-          return;
-        }
-
-        const doctorKey = getDoctorAvailabilityKey(user?.id);
-        let stored = await AsyncStorage.getItem(doctorKey);
-
-        if (!stored) {
-          stored = await AsyncStorage.getItem(DOCTOR_AVAILABILITY_STORAGE_KEY);
-        }
-
-        if (stored && mounted) {
-          const parsed = JSON.parse(stored) as AvailabilitySettings;
-
-          if (
-            typeof parsed.acceptingAppointments === 'boolean' &&
-            Array.isArray(parsed.schedule)
-          ) {
-            setSettings(parsed);
-            if (user?.id) {
-              updateDoctorAvailability(user.id, parsed);
-            }
-          }
-        }
-      } catch {
-        Alert.alert(
-          'Could not load availability',
-          'Default availability settings will be shown.'
-        );
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+    function loadSettings() {
+      if (currentDoctor?.availability && mounted) {
+        setSettings(currentDoctor.availability);
+      }
+      if (mounted) {
+        setLoading(false);
       }
     }
 
@@ -113,7 +77,7 @@ export default function DoctorAvailabilityScreen() {
     return () => {
       mounted = false;
     };
-  }, [user?.id, currentDoctor?.availability, updateDoctorAvailability]);
+  }, [currentDoctor?.availability]);
 
   const updateSettings = (
     updater: (current: AvailabilitySettings) => AvailabilitySettings
@@ -250,14 +214,9 @@ export default function DoctorAvailabilityScreen() {
     setSaving(true);
 
     try {
-      const json = JSON.stringify(settings);
-
-      // Save to doctor-specific key and generic key
       if (user?.id) {
-        await AsyncStorage.setItem(getDoctorAvailabilityKey(user.id), json);
-        updateDoctorAvailability(user.id, settings);
+        await updateDoctorAvailability(user.id, settings);
       }
-      await AsyncStorage.setItem(DOCTOR_AVAILABILITY_STORAGE_KEY, json);
 
       setSaved(true);
       Alert.alert(

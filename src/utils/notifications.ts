@@ -151,9 +151,148 @@ export type PatientReminderParams = {
 };
 
 /**
- * Notify the specific patient:
- * 1. Immediate confirmation in-app (only for this patient)
- * 2. Scheduled reminder 10 minutes before the appointment time (only for this patient)
+ * Notify the specific patient when their appointment is CONFIRMED by the doctor:
+ * 1. Immediate in-app confirmation (only for this patient)
+ * 2. Immediate device notification (only for this patient)
+ * 3. Schedule 10-minutes-before reminder
+ */
+export async function notifyPatientAppointmentConfirmed(
+  params: PatientReminderParams
+): Promise<string | undefined> {
+  const {
+    patientId,
+    patientName,
+    doctorName,
+    date,
+    time,
+    serialNumber,
+    appointmentId,
+  } = params;
+
+  if (!patientId) return undefined;
+
+  // 1. In-app confirmation specifically for this patient
+  useNotificationStore.getState().addNotification({
+    recipientId: patientId,
+    recipientRole: 'patient',
+    title: 'Appointment Confirmed 🎉',
+    message: `Dr. ${doctorName} has confirmed your appointment for ${date} at ${time}. Serial: ${serialNumber}.`,
+    type: 'patient_booking_confirmation',
+    appointmentId,
+    doctorName,
+    patientName,
+    date,
+    time,
+    serialNumber,
+  });
+
+  // 2. Dispatch immediate device notification for the patient
+  if (Platform.OS !== 'web') {
+    try {
+      await requestNotificationPermissions();
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '🎉 Appointment Confirmed',
+          body: `Dr. ${doctorName} has confirmed your appointment for ${date} at ${time}. Serial: ${serialNumber}`,
+          data: {
+            appointmentId,
+            patientId,
+            type: 'patient_booking_confirmation',
+          },
+          sound: true,
+        },
+        trigger: null, // immediate
+      });
+    } catch (err) {
+      console.warn('Could not dispatch patient confirmation notification:', err);
+    }
+  }
+
+  // 3. Schedule 10-minutes-before reminder
+  return schedulePatientAppointmentReminder(params);
+}
+
+/**
+ * Dispatches the appropriate notification to the patient when doctor or admin updates status
+ */
+export async function notifyPatientAppointmentStatus(
+  appointment: {
+    id: string;
+    patientId?: string;
+    patientName?: string;
+    doctorName: string;
+    date: string;
+    time: string;
+    serialNumber: string;
+  },
+  status: 'pending' | 'confirmed' | 'rejected' | 'completed' | 'cancelled'
+): Promise<void> {
+  if (!appointment.patientId) return;
+
+  if (status === 'confirmed') {
+    await notifyPatientAppointmentConfirmed({
+      patientId: appointment.patientId,
+      patientName: appointment.patientName || 'Patient',
+      doctorName: appointment.doctorName,
+      date: appointment.date,
+      time: appointment.time,
+      serialNumber: appointment.serialNumber || 'SL-01',
+      appointmentId: appointment.id,
+    });
+  } else if (status === 'rejected') {
+    useNotificationStore.getState().addNotification({
+      recipientId: appointment.patientId,
+      recipientRole: 'patient',
+      title: 'Appointment Rejected ❌',
+      message: `Your appointment request with Dr. ${appointment.doctorName} on ${appointment.date} (Serial: ${appointment.serialNumber}) was rejected.`,
+      type: 'appointment_cancelled',
+      appointmentId: appointment.id,
+      doctorName: appointment.doctorName,
+      patientName: appointment.patientName,
+      date: appointment.date,
+      time: appointment.time,
+      serialNumber: appointment.serialNumber,
+    });
+
+    if (Platform.OS !== 'web') {
+      try {
+        await requestNotificationPermissions();
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: '❌ Appointment Rejected',
+            body: `Your appointment request with Dr. ${appointment.doctorName} for ${appointment.date} was rejected.`,
+            data: {
+              appointmentId: appointment.id,
+              type: 'appointment_cancelled',
+            },
+            sound: true,
+          },
+          trigger: null,
+        });
+      } catch (err) {
+        console.warn('Could not dispatch rejection notification:', err);
+      }
+    }
+  } else if (status === 'completed') {
+    useNotificationStore.getState().addNotification({
+      recipientId: appointment.patientId,
+      recipientRole: 'patient',
+      title: 'Appointment Completed ✅',
+      message: `Your consultation with Dr. ${appointment.doctorName} on ${appointment.date} (Serial: ${appointment.serialNumber}) was completed.`,
+      type: 'patient_booking_confirmation',
+      appointmentId: appointment.id,
+      doctorName: appointment.doctorName,
+      patientName: appointment.patientName,
+      date: appointment.date,
+      time: appointment.time,
+      serialNumber: appointment.serialNumber,
+    });
+  }
+}
+
+/**
+ * Schedules a reminder 10 minutes before the appointment time for the patient
  */
 export async function schedulePatientAppointmentReminder(
   params: PatientReminderParams
@@ -168,22 +307,7 @@ export async function schedulePatientAppointmentReminder(
     appointmentId,
   } = params;
 
-  // 1. In-app booking confirmation specifically for this patient
-  useNotificationStore.getState().addNotification({
-    recipientId: patientId,
-    recipientRole: 'patient',
-    title: 'Appointment Confirmed 🎉',
-    message: `Your appointment with Dr. ${doctorName} is confirmed for ${date} at ${time}. Serial: ${serialNumber}.`,
-    type: 'patient_booking_confirmation',
-    appointmentId,
-    doctorName,
-    patientName,
-    date,
-    time,
-    serialNumber,
-  });
-
-  // 2. Calculate 10-minutes-before reminder time
+  // Calculate 10-minutes-before reminder time
   const reminderDate = getPatientReminderDate(date, time, 10);
   let scheduledNotificationId: string | undefined;
 

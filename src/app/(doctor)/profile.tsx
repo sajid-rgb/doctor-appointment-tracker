@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -29,7 +29,16 @@ export default function DoctorProfileScreen() {
   );
   const appointments = useAppointmentStore((state) => state.appointments);
 
-  const doctor = doctors.find((item) => item.id === user?.id);
+  const doctor = useMemo(
+    () =>
+      doctors.find(
+        (item) =>
+          item.id === user?.id ||
+          (user?.email &&
+            item.email?.toLowerCase() === user.email.toLowerCase())
+      ),
+    [doctors, user?.id, user?.email]
+  );
 
   const [isEditing, setIsEditing] = useState(false);
 
@@ -47,6 +56,21 @@ export default function DoctorProfileScreen() {
   const [hospital, setHospital] = useState(doctor?.hospital || '');
   const [bio, setBio] = useState(doctor?.bio || '');
   const [imageUri, setImageUri] = useState<string | undefined>(doctor?.image);
+
+  // Synchronize local form state with store doctor profile whenever it changes
+  useEffect(() => {
+    if (doctor && !isEditing) {
+      setName(doctor.name || user?.name || '');
+      setPhone(doctor.phone || user?.phone || '');
+      setSpecialty(doctor.specialty || '');
+      setQualification(doctor.qualification || '');
+      setExperience(doctor.experience ? String(doctor.experience) : '');
+      setFee(doctor.fee ? String(doctor.fee) : '');
+      setHospital(doctor.hospital || '');
+      setBio(doctor.bio || '');
+      setImageUri(doctor.image);
+    }
+  }, [doctor, isEditing, user?.name, user?.phone]);
 
   const myAppointments = useMemo(
     () => appointments.filter((a) => a.doctorId === user?.id),
@@ -68,8 +92,9 @@ export default function DoctorProfileScreen() {
 
   const savePhoto = (uri?: string) => {
     setImageUri(uri);
-    if (doctor) {
-      updateDoctorProfile(doctor.id, { image: uri });
+    const targetId = doctor?.id || user?.id;
+    if (targetId) {
+      updateDoctorProfile(targetId, { image: uri });
       updateUserProfile({ image: uri });
     }
   };
@@ -239,7 +264,8 @@ export default function DoctorProfileScreen() {
     }
 
     // Update in doctorStore
-    updateDoctorProfile(doctor.id, {
+    const targetId = doctor?.id || user.id;
+    updateDoctorProfile(targetId, {
       name: trimmedName,
       phone: phone.trim() || undefined,
       image: imageUri,

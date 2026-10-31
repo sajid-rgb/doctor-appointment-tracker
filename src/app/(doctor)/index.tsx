@@ -139,7 +139,11 @@ export default function DoctorDashboard() {
   const user = useAuthStore((state) => state.user);
   const appointments = useAppointmentStore((state) => state.appointments);
   const doctors = useDoctorStore((state) => state.doctors);
-  const currentDoctor = doctors.find((d) => d.id === user?.id);
+  const currentDoctor = doctors.find(
+    (d) =>
+      d.id === user?.id ||
+      (user?.email && d.email.toLowerCase() === user.email.toLowerCase())
+  );
 
   const today = new Date();
   const todayStart = new Date(
@@ -155,12 +159,14 @@ export default function DoctorDashboard() {
       return [];
     }
 
+    const doctorIds = new Set([user.id, currentDoctor?.id].filter(Boolean));
+
     return appointments
       .filter((item) => {
         const appointmentDate = parseDate(item.date);
 
         return (
-          item.doctorId === user.id &&
+          doctorIds.has(item.doctorId) &&
           (item.status === 'pending' || item.status === 'confirmed') &&
           appointmentDate !== null &&
           appointmentDate >= todayStart
@@ -171,7 +177,7 @@ export default function DoctorDashboard() {
           getAppointmentTimestamp(a.date, a.time) -
           getAppointmentTimestamp(b.date, b.time)
       );
-  }, [appointments, user?.id, todayStart.getTime()]);
+  }, [appointments, user?.id, currentDoctor?.id, todayStart.getTime()]);
 
   const todayAppointments = useMemo(
     () =>

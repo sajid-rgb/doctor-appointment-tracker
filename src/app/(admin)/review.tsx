@@ -20,6 +20,7 @@ export default function DoctorReviewScreen() {
   const updateApprovalStatus = useDoctorStore(
     (state) => state.updateApprovalStatus
   );
+  const deleteDoctor = useDoctorStore((state) => state.deleteDoctor);
 
   const [filter, setFilter] = useState<FilterType>('pending');
 
@@ -47,6 +48,27 @@ export default function DoctorReviewScreen() {
           text: status === 'approved' ? 'Approve' : 'Reject',
           style: status === 'rejected' ? 'destructive' : 'default',
           onPress: () => updateApprovalStatus(doctorId, status),
+        },
+      ]
+    );
+  };
+
+  const handleDeleteDoctor = (doctorId: string, doctorName: string) => {
+    Alert.alert(
+      'Delete Doctor',
+      `Are you sure you want to permanently delete Dr. ${doctorName}? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoctor(doctorId);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Failed to delete doctor');
+            }
+          },
         },
       ]
     );
@@ -118,6 +140,14 @@ export default function DoctorReviewScreen() {
           <Text style={styles.rejectButtonText}>Reject Doctor</Text>
         </Pressable>
       )}
+
+      <Pressable
+        style={styles.deleteButton}
+        onPress={() => handleDeleteDoctor(item.id, item.name)}
+      >
+        <Ionicons name="trash-outline" size={17} color="#EF4444" />
+        <Text style={styles.deleteButtonText}>Delete Doctor</Text>
+      </Pressable>
     </View>
   );
 
@@ -289,6 +319,19 @@ const styles = StyleSheet.create({
     marginTop: 9,
   },
   rejectButtonText: { color: '#DC2626', fontWeight: '700' },
+  deleteButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    marginTop: 9,
+  },
+  deleteButtonText: { color: '#DC2626', fontWeight: '700' },
   empty: { alignItems: 'center', paddingTop: 65, paddingHorizontal: 20 },
   emptyTitle: {
     fontSize: 17,

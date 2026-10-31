@@ -77,7 +77,7 @@ export default function SignupScreen() {
     }
   };
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     if (loading) return;
 
     setError('');
@@ -135,43 +135,50 @@ export default function SignupScreen() {
     setLoading(true);
 
     try {
-      const signupError = signUp(cleanName, cleanEmail, password, role);
+      const signupError = await signUp(cleanName, cleanEmail, password, role);
 
       if (signupError) {
         setError(signupError);
+        Alert.alert('Sign Up Failed', signupError);
         return;
       }
 
       if (role === 'doctor') {
         const createdUser = useAuthStore.getState().user;
 
-        if (!createdUser) {
-          setError(
-            'Account created, but the doctor profile could not be initialized.'
-          );
-          return;
-        }
+        if (createdUser) {
+          try {
+            await registerDoctor({
+              id: createdUser.id,
+              name: createdUser.name,
+              email: createdUser.email,
+              image: doctorImage,
+              specialty,
+              qualification: qualification.trim(),
+              experience: Number(experience),
+              fee: Number(fee),
+              bio: bio.trim(),
+            });
+          } catch (docErr) {
+            console.warn('Doctor registration warning:', docErr);
+          }
 
-        registerDoctor({
-          id: createdUser.id,
-          name: createdUser.name,
-          email: createdUser.email,
-          image: doctorImage,
-          specialty,
-          qualification: qualification.trim(),
-          experience: Number(experience),
-          fee: Number(fee),
-          bio: bio.trim(),
-        });
-
-        if (doctorImage) {
-          useAuthStore.getState().updateUserProfile({ image: doctorImage });
+          if (doctorImage) {
+            useAuthStore.getState().updateUserProfile({ image: doctorImage });
+          }
         }
       }
 
-      router.replace('/');
-    } catch {
-      setError('Something went wrong. Please try again.');
+      // Direct redirection based on role
+      if (role === 'doctor') {
+        router.replace('/(doctor)');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } catch (err: any) {
+      const msg = err?.message || 'Something went wrong. Please try again.';
+      setError(msg);
+      Alert.alert('Sign Up Error', msg);
     } finally {
       setLoading(false);
     }

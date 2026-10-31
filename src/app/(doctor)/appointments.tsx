@@ -16,7 +16,9 @@ import type {
 } from '../../store/appointmentStore';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
+import { useDoctorStore } from '../../store/doctorStore';
 import { useNotificationStore } from '../../store/notificationStore';
+import { notifyPatientAppointmentStatus } from '../../utils/notifications';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
 
 function formatFileSize(bytes?: number): string {
@@ -32,16 +34,21 @@ export default function DoctorAppointmentsScreen() {
   const updateStatus = useAppointmentStore(
     (state) => state.updateAppointmentStatus
   );
-
-  const myAppointments = useMemo(
-    () =>
-      appointments
-        .filter((appointment) => appointment.doctorId === user?.id)
-        .sort((a, b) =>
-          `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)
-        ),
-    [appointments, user?.id]
+  const doctors = useDoctorStore((state) => state.doctors);
+  const currentDoctor = doctors.find(
+    (d) =>
+      d.id === user?.id ||
+      (user?.email && d.email.toLowerCase() === user.email.toLowerCase())
   );
+
+  const myAppointments = useMemo(() => {
+    const doctorIds = new Set([user?.id, currentDoctor?.id].filter(Boolean));
+    return appointments
+      .filter((appointment) => doctorIds.has(appointment.doctorId))
+      .sort((a, b) =>
+        `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)
+      );
+  }, [appointments, user?.id, currentDoctor?.id]);
 
   const notifyViaWhatsApp = (appointment: Appointment) => {
     sendWhatsAppNotification({
@@ -73,29 +80,10 @@ export default function DoctorAppointmentsScreen() {
         onPress: () => {
           updateStatus(appointment.id, status);
 
-          if (appointment.patientId) {
-            useNotificationStore.getState().addNotification({
-              recipientId: appointment.patientId,
-              recipientRole: 'patient',
-              title:
-                status === 'confirmed'
-                  ? 'Appointment Confirmed 🎉'
-                  : status === 'completed'
-                    ? 'Appointment Completed ✅'
-                    : 'Appointment Rejected ❌',
-              message: `Your appointment with Dr. ${appointment.doctorName} on ${appointment.date} at ${appointment.time} (Serial: ${appointment.serialNumber}) was marked as ${status}.`,
-              type:
-                status === 'rejected'
-                  ? 'appointment_cancelled'
-                  : 'patient_booking_confirmation',
-              appointmentId: appointment.id,
-              doctorName: appointment.doctorName,
-              patientName: appointment.patientName,
-              date: appointment.date,
-              time: appointment.time,
-              serialNumber: appointment.serialNumber,
-            });
-          }
+          // Notify the patient after confirmation or status update from doctor
+          notifyPatientAppointmentStatus(appointment, status).catch((err) => {
+            console.warn('Failed to notify patient of status change:', err);
+          });
 
           if (status === 'confirmed') {
             Alert.alert(

@@ -1,6 +1,14 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+
+import {
+  clearNotificationsForUserInFirestore,
+  deleteNotificationFromFirestore,
+  fetchNotificationsFromFirestore,
+  markAllNotificationsAsReadInFirestore,
+  markNotificationAsReadInFirestore,
+  saveNotificationToFirestore,
+  subscribeToNotifications,
+} from '../services/notificationService';
 
 export type NotificationType =
   | 'doctor_new_appointment'
@@ -30,6 +38,7 @@ export type AppNotification = {
 
 type NotificationState = {
   notifications: AppNotification[];
+  isLoading: boolean;
   addNotification: (
     notification: Omit<AppNotification, 'id' | 'isRead' | 'createdAt'>
   ) => AppNotification;
@@ -37,75 +46,124 @@ type NotificationState = {
   markAllAsRead: (recipientId: string) => void;
   deleteNotification: (id: string) => void;
   clearNotificationsForUser: (recipientId: string) => void;
+  fetchNotifications: () => Promise<void>;
 };
 
-export const useNotificationStore = create<NotificationState>()(
-  persist(
-    (set, get) => ({
-      notifications: [],
+export const useNotificationStore = create<NotificationState>()((set, get) => ({
+  notifications: [],
+  isLoading: true,
 
-      addNotification: (notificationData) => {
-        const newNotification: AppNotification = {
-          ...notificationData,
-          id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          isRead: false,
-          createdAt: new Date().toISOString(),
-        };
-
-        set((state) => ({
-          notifications: [newNotification, ...state.notifications],
-        }));
-
-        return newNotification;
-      },
-
-      markAsRead: (id) =>
-        set((state) => ({
-          notifications: state.notifications.map((n) =>
-            n.id === id ? { ...n, isRead: true } : n
-          ),
-        })),
-
-      markAllAsRead: (recipientId) =>
-        set((state) => ({
-          notifications: state.notifications.map((n) =>
-            n.recipientId === recipientId ? { ...n, isRead: true } : n
-          ),
-        })),
-
-      deleteNotification: (id) =>
-        set((state) => ({
-          notifications: state.notifications.filter((n) => n.id !== id),
-        })),
-
-      clearNotificationsForUser: (recipientId) =>
-        set((state) => ({
-          notifications: state.notifications.filter(
-            (n) => n.recipientId !== recipientId
-          ),
-        })),
-    }),
-    {
-      name: 'carepoint-notifications',
-      storage: createJSONStorage(() => AsyncStorage),
-      version: 2,
-      migrate: (persistedState: any, version: number) => {
-        if (
-          version < 2 &&
-          persistedState &&
-          Array.isArray(persistedState.notifications)
-        ) {
-          // Remove legacy notifications with recipientId === 'all' so they don't leak to other users
-          const filtered = persistedState.notifications.filter(
-            (n: any) => n?.recipientId && n.recipientId !== 'all'
-          );
-          return {
-            ...persistedState,
-            notifications: filtered,
-          };
-        }
-        return persistedState;
-      },
+  fetchNotifications: async () => {
+    set({ isLoading: true });
+    try {
+      const notifications = await fetchNotificationsFromFirestore();
+      set({ notifications, isLoading: false });
+    } catch {
+      set({ isLoading: false });
     }
-  )
-);
+  },
+
+  addNotification: (notificationData) => {
+    const newNotification: AppNotification = {
+      ...notificationData,
+      id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      isRead: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Optimistic local update
+    set((state) => ({
+      notifications: [newNotification, ...state.notifications],
+    }));
+
+    // Persist to Cloud Firestore API
+    saveNotificationToFirestore(newNotification).catch((err) => {
+      console.warn('Failed to save notification to Firestore API:', err);
+    });
+
+    return newNotification;
+  },
+
+  markAsRead: (id) => {
+    // Optimistic local update
+    set((state) => ({
+      notifications: state.notifications.map((n) =>
+        n.id === id ? { ...n, isRead: true } : n
+      ),
+    }));
+
+    // Sync to Cloud Firestore API
+    markNotificationAsReadInFirestore(id).catch((err) => {
+      console.warn('Failed to mark notification as read in Firestore API:', err);
+    });
+  },
+
+  markAllAsRead: (recipientId) => {
+    const current = get().notifications;
+
+    // Optimistic local update
+    set((state) => ({
+      notifications: state.notifications.map((n) =>
+        n.recipientId === recipientId ? { ...n, isRead: true } : n
+      ),
+    }));
+
+    // Sync to Cloud Firestore API
+    markAllNotificationsAsReadInFirestore(recipientId, current).catch((err) => {
+      console.warn('Failed to mark all notifications as read in Firestore API:', err);
+    });
+  },
+
+  deleteNotification: (id) => {
+    // Optimistic local update
+    set((state) => ({
+      notifications: state.notifications.filter((n) => n.id !== id),
+    }));
+
+    // Sync to Cloud Firestore API
+    deleteNotificationFromFirestore(id).catch((err) => {
+      console.warn('Failed to delete notification from Firestore API:', err);
+    });
+  },
+
+  clearNotificationsForUser: (recipientId) => {
+    const current = get().notifications;
+
+    // Optimistic local update
+    set((state) => ({
+      notifications: state.notifications.filter(
+        (n) => n.recipientId !== recipientId
+      ),
+    }));
+
+    // Sync to Cloud Firestore API
+    clearNotificationsForUserInFirestore(recipientId, current).catch((err) => {
+      console.warn('Failed to clear notifications in Firestore API:', err);
+    });
+  },
+}));
+
+// Real-time Cloud Firestore subscription for notifications
+let unsubscribeNotifications: (() => void) | null = null;
+
+export function initNotificationFirestoreListener(): () => void {
+  if (unsubscribeNotifications) return unsubscribeNotifications;
+
+  unsubscribeNotifications = subscribeToNotifications(
+    (notifications) => {
+      useNotificationStore.setState({
+        notifications,
+        isLoading: false,
+      });
+    },
+    (error) => {
+      console.warn('Firestore notifications subscription error:', error);
+      useNotificationStore.setState({ isLoading: false });
+    }
+  );
+
+  return unsubscribeNotifications;
+}
+
+// Automatically start listening to Cloud Firestore API
+initNotificationFirestoreListener();

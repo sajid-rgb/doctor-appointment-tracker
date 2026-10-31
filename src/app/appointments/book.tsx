@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -19,8 +18,6 @@ import { DoctorAvatar } from '../../components/DoctorAvatar';
 import {
   type AvailabilitySettings,
   DEFAULT_AVAILABILITY,
-  DOCTOR_AVAILABILITY_STORAGE_KEY,
-  getDoctorAvailabilityKey,
   getWeekdayName,
   isSlotInPast,
   sortTimeSlots,
@@ -32,10 +29,7 @@ import {
 } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { useDoctorStore } from '../../store/doctorStore';
-import {
-  notifyDoctorNewAppointment,
-  schedulePatientAppointmentReminder,
-} from '../../utils/notifications';
+import { notifyDoctorNewAppointment } from '../../utils/notifications';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
 
 function formatFileSize(bytes?: number): string {
@@ -111,43 +105,16 @@ export default function BookAppointmentScreen() {
     return <Redirect href="/login" />;
   }
 
-  // Load availability dynamically from doctorStore or AsyncStorage
+  // Load availability directly from doctorStore (synchronized with Cloud Firestore API)
   useEffect(() => {
     let mounted = true;
 
-    async function loadDoctorAvailability() {
+    function loadDoctorAvailability() {
       if (doctor?.availability) {
         setAvailability(doctor.availability);
-        setLoadingAvailability(false);
-        return;
       }
-
-      try {
-        const doctorKey = getDoctorAvailabilityKey(doctorId);
-        let stored = await AsyncStorage.getItem(doctorKey);
-
-        if (!stored) {
-          stored = await AsyncStorage.getItem(DOCTOR_AVAILABILITY_STORAGE_KEY);
-        }
-
-        if (stored && mounted) {
-          const parsed = JSON.parse(stored) as AvailabilitySettings;
-          if (
-            typeof parsed.acceptingAppointments === 'boolean' &&
-            Array.isArray(parsed.schedule)
-          ) {
-            setAvailability(parsed);
-            if (doctorId) {
-              updateDoctorAvailability(doctorId, parsed);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Could not load doctor availability:', err);
-      } finally {
-        if (mounted) {
-          setLoadingAvailability(false);
-        }
+      if (mounted) {
+        setLoadingAvailability(false);
       }
     }
 
@@ -156,7 +123,7 @@ export default function BookAppointmentScreen() {
     return () => {
       mounted = false;
     };
-  }, [doctorId, doctor?.availability, updateDoctorAvailability]);
+  }, [doctor?.availability]);
 
   // Next 14 days for appointment scheduling
   const dateOptions = useMemo(() => {
@@ -448,7 +415,7 @@ export default function BookAppointmentScreen() {
         bloodGroup: bloodGroup.trim(),
       });
 
-      // 1. Immediately notify the doctor about new appointment
+      // Immediately notify the doctor about new appointment
       await notifyDoctorNewAppointment({
         doctorId: doctor.id,
         doctorName: doctor.name,
@@ -459,20 +426,12 @@ export default function BookAppointmentScreen() {
         appointmentId: created.id,
       });
 
-      // 2. Schedule patient notification 10 minutes before the appointment time
-      await schedulePatientAppointmentReminder({
-        patientId: user.id,
-        patientName: user.name,
-        doctorName: doctor.name,
-        date: selectedDate,
-        time: selectedTime,
-        serialNumber: created.serialNumber,
-        appointmentId: created.id,
-      });
+      // Note: Patient is NOT notified instantly upon creation.
+      // Patient will be notified after the doctor confirms the appointment.
 
       Alert.alert(
-        '🎉 Booking Confirmed!',
-        `Your appointment is confirmed!\n\n🎟️ Serial Number: ${created.serialNumber}\n👨‍⚕️ Doctor: ${doctor.name}\n📅 Date: ${selectedDate} (${selectedTime})\n\nSend confirmation slip to WhatsApp?`,
+        '🎉 Appointment Booked!',
+        `Your appointment request has been submitted to Dr. ${doctor.name}.\n\n🎟️ Serial Number: ${created.serialNumber}\n📅 Date: ${selectedDate} (${selectedTime})\nStatus: Pending Doctor Confirmation\n\nYou will be notified as soon as Dr. ${doctor.name} confirms your appointment.\n\nSend booking slip to WhatsApp?`,
         [
           {
             text: 'View Appointments',

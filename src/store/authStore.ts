@@ -1,6 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onAuthStateChanged } from 'firebase/auth';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+
+import { auth } from '../config/firebase';
+import {
+  deleteUserFromFirestore,
+  fetchUserProfileById,
+  fetchUsersFromFirestore,
+  loginWithFirebase,
+  logoutFirebase,
+  signUpWithFirebase,
+  subscribeToUserProfile,
+  subscribeToUsers,
+  updateUserFirestoreProfile,
+} from '../services/authService';
+
+export const AUTH_TOKEN_STORAGE_KEY = 'carepoint_auth_token';
+const ADMIN_SESSION_TOKEN = 'carepoint-admin-session-token';
 
 export type UserRole = 'patient' | 'doctor' | 'admin';
 type SignUpRole = 'patient' | 'doctor';
@@ -21,21 +38,24 @@ export type AuthUser = {
 };
 
 type DemoAccount = AuthUser & {
-  password: string;
+  password?: string;
 };
 
 type AuthState = {
   users: DemoAccount[];
   user: AuthUser | null;
+  token: string | null;
   hasHydrated: boolean;
+  isLoadingUsers: boolean;
   setHasHydrated: (value: boolean) => void;
+  setToken: (token: string | null) => void;
   signUp: (
     name: string,
     email: string,
     password: string,
     role: SignUpRole
-  ) => string | null;
-  login: (email: string, password: string) => string | null;
+  ) => Promise<string | null>;
+  login: (email: string, password: string) => Promise<string | null>;
   updateUserProfile: (
     updates: Partial<
       Pick<
@@ -51,8 +71,10 @@ type AuthState = {
         | 'medicalHistory'
       >
     >
-  ) => void;
+  ) => Promise<void>;
   logout: () => void;
+  fetchUsers: () => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
 };
 
 const ADMIN_EMAIL = 'admin@admin.com';
@@ -66,100 +88,281 @@ const demoAdmin: DemoAccount = {
   role: 'admin',
 };
 
+// Real-time listener reference for the current active user
+let unsubscribeCurrentUser: (() => void) | null = null;
+
+function attachCurrentUserListener(userId: string) {
+  if (unsubscribeCurrentUser) {
+    unsubscribeCurrentUser();
+    unsubscribeCurrentUser = null;
+  }
+  if (!userId || userId === demoAdmin.id) return;
+
+  unsubscribeCurrentUser = subscribeToUserProfile(userId, (updatedProfile) => {
+    if (updatedProfile) {
+      useAuthStore.setState({ user: updatedProfile });
+    }
+  });
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       users: [demoAdmin],
       user: null,
+      token: null,
       hasHydrated: false,
+      isLoadingUsers: true,
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
+      setToken: (token) => {
+        set({ token });
+        if (token) {
+          AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token).catch(() => {});
+        } else {
+          AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY).catch(() => {});
+        }
+      },
 
-      signUp: (name, email, password, role) => {
+      fetchUsers: async () => {
+        set({ isLoadingUsers: true });
+        try {
+          const firestoreUsers = await fetchUsersFromFirestore();
+          const hasAdmin = firestoreUsers.some((u) => u.email === ADMIN_EMAIL);
+          const combined = hasAdmin
+            ? firestoreUsers
+            : [demoAdmin, ...firestoreUsers.filter((u) => u.id !== demoAdmin.id)];
+
+          set({ users: combined, isLoadingUsers: false });
+        } catch {
+          set({ isLoadingUsers: false });
+        }
+      },
+
+      signUp: async (name, email, password, role) => {
         const normalizedEmail = email.trim().toLowerCase();
 
         if (normalizedEmail === ADMIN_EMAIL) {
           return 'This email is reserved for the admin account.';
         }
 
-        if (get().users.some((item) => item.email === normalizedEmail)) {
-          return 'An account with this email already exists.';
+        // Firebase Auth sign up & Firestore user document creation
+        const result = await signUpWithFirebase(name, email, password, role);
+
+        if (result.error || !result.user) {
+          return result.error || 'Sign up failed. Please try again.';
         }
 
-        const account: DemoAccount = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          name: name.trim(),
-          email: normalizedEmail,
-          password,
-          role,
-        };
+        const newUser = result.user;
+        const authToken = result.token || newUser.id;
 
+        // Only store token in AsyncStorage; user profile lives in Firestore
         set((state) => ({
-          users: [...state.users, account],
-          user: {
-            id: account.id,
-            name: account.name,
-            email: account.email,
-            role: account.role,
-          },
+          users: [
+            ...state.users.filter((item) => item.email !== normalizedEmail),
+            newUser,
+          ],
+          user: newUser,
+          token: authToken,
         }));
 
+        AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
+        attachCurrentUserListener(newUser.id);
         return null;
       },
 
-      login: (email, password) => {
+      login: async (email, password) => {
         const normalizedEmail = email.trim().toLowerCase();
 
-        // Demo admin login works even if AsyncStorage has older saved users.
+        // Demo admin login
         if (normalizedEmail === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
           const { password: _password, ...safeAdmin } = demoAdmin;
-          set({ user: safeAdmin });
+          const authToken = ADMIN_SESSION_TOKEN;
+          set({ user: safeAdmin, token: authToken });
+          AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
           return null;
         }
 
-        const account = get().users.find(
-          (item) =>
-            item.email === normalizedEmail &&
-            item.password === password &&
-            item.role !== 'admin'
-        );
+        // Firebase Auth sign in & Firestore profile load
+        const result = await loginWithFirebase(email, password);
 
-        if (!account) {
-          return 'Invalid email or password.';
+        if (result.error || !result.user) {
+          // Fallback check against loaded firestore users if offline
+          const localAccount = get().users.find(
+            (item) =>
+              item.email === normalizedEmail &&
+              item.password === password &&
+              item.role !== 'admin'
+          );
+
+          if (localAccount) {
+            const { password: _password, ...safeUser } = localAccount;
+            const authToken = safeUser.id;
+            set({ user: safeUser, token: authToken });
+            AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
+            return null;
+          }
+
+          return result.error || 'Invalid email or password.';
         }
 
-        const { password: _password, ...safeUser } = account;
-        set({ user: safeUser });
+        const loggedInUser = result.user;
+        const authToken = result.token || loggedInUser.id;
 
+        // Set memory state and save ONLY token to AsyncStorage
+        set((state) => ({
+          user: loggedInUser,
+          token: authToken,
+          users: state.users.some((item) => item.id === loggedInUser.id)
+            ? state.users.map((item) =>
+                item.id === loggedInUser.id ? { ...item, ...loggedInUser } : item
+              )
+            : [...state.users, loggedInUser],
+        }));
+
+        AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
+        attachCurrentUserListener(loggedInUser.id);
         return null;
       },
 
-      updateUserProfile: (updates) =>
-        set((state) => {
-          if (!state.user) return state;
+      updateUserProfile: async (updates) => {
+        const currentUser = get().user;
+        if (!currentUser) return;
 
-          const updatedUser = { ...state.user, ...updates };
+        // Optimistic local update
+        const updatedUser = { ...currentUser, ...updates };
+        set((state) => ({
+          user: updatedUser,
+          users: state.users.map((item) =>
+            item.id === currentUser.id ? { ...item, ...updates } : item
+          ),
+        }));
 
-          return {
-            user: updatedUser,
-            users: state.users.map((item) =>
-              item.id === state.user?.id ? { ...item, ...updates } : item
-            ),
-          };
-        }),
+        // Write directly to Cloud Firestore API
+        if (currentUser.id && currentUser.role !== 'admin') {
+          try {
+            await updateUserFirestoreProfile(currentUser.id, updates);
+          } catch (err) {
+            console.warn('Failed to update user profile in Firestore API:', err);
+          }
+        }
+      },
 
-      logout: () => set({ user: null }),
+      logout: () => {
+        if (unsubscribeCurrentUser) {
+          unsubscribeCurrentUser();
+          unsubscribeCurrentUser = null;
+        }
+        logoutFirebase().catch(() => {});
+        AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY).catch(() => {});
+        set({ user: null, token: null });
+      },
+
+      deleteUser: async (userId: string) => {
+        if (userId === demoAdmin.id) return;
+
+        // Optimistic local update
+        set((state) => ({
+          users: state.users.filter((item) => item.id !== userId),
+          user: state.user?.id === userId ? null : state.user,
+        }));
+
+        // Delete from Cloud Firestore API
+        try {
+          await deleteUserFromFirestore(userId);
+        } catch (err) {
+          console.warn('Failed to delete user from Firestore API:', err);
+        }
+      },
     }),
     {
       name: 'carepoint-demo-auth',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-        users: state.users,
-        user: state.user,
+        // Note: As requested, ONLY the auth token is stored in AsyncStorage!
+        // All user profiles, doctors, patients, and appointments are stored in Cloud Firestore API.
+        token: state.token,
       }),
-      onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true);
+      onRehydrateStorage: () => async (state) => {
+        // Read persisted token
+        const persistedToken = state?.token || (await AsyncStorage.getItem(AUTH_TOKEN_STORAGE_KEY));
+
+        if (persistedToken === ADMIN_SESSION_TOKEN) {
+          const { password: _password, ...safeAdmin } = demoAdmin;
+          useAuthStore.setState({ user: safeAdmin, token: persistedToken, hasHydrated: true });
+          return;
+        }
+
+        // If there's an active Firebase session, load user profile from Firestore API
+        const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+          if (firebaseUser) {
+            const token = await firebaseUser.getIdToken().catch(() => firebaseUser.uid);
+            const userProfile = await fetchUserProfileById(firebaseUser.uid);
+
+            const resolvedUser: AuthUser = userProfile || {
+              id: firebaseUser.uid,
+              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              email: firebaseUser.email || '',
+              role: 'patient',
+            };
+
+            useAuthStore.setState({
+              user: resolvedUser,
+              token,
+              hasHydrated: true,
+            });
+
+            AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token).catch(() => {});
+            attachCurrentUserListener(resolvedUser.id);
+          } else {
+            // No active Firebase session
+            const currentToken = useAuthStore.getState().token;
+            if (currentToken && currentToken !== ADMIN_SESSION_TOKEN) {
+              useAuthStore.setState({ user: null, token: null });
+              AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY).catch(() => {});
+            }
+            useAuthStore.setState({ hasHydrated: true });
+          }
+          unsubscribeAuth();
+        });
+
+        // Safety fallback: if Firebase onAuthStateChanged takes longer than 2.5s, mark hydrated
+        setTimeout(() => {
+          if (!useAuthStore.getState().hasHydrated) {
+            useAuthStore.setState({ hasHydrated: true });
+          }
+        }, 2500);
       },
     }
   )
 );
+
+// Real-time Cloud Firestore subscription for all users and patients
+let unsubscribeUsers: (() => void) | null = null;
+
+export function initUsersFirestoreListener(): () => void {
+  if (unsubscribeUsers) return unsubscribeUsers;
+
+  unsubscribeUsers = subscribeToUsers(
+    (firestoreUsers) => {
+      const hasAdmin = firestoreUsers.some((u) => u.email === ADMIN_EMAIL);
+      const combined = hasAdmin
+        ? firestoreUsers
+        : [demoAdmin, ...firestoreUsers.filter((u) => u.id !== demoAdmin.id)];
+
+      useAuthStore.setState({
+        users: combined,
+        isLoadingUsers: false,
+      });
+    },
+    (error) => {
+      console.warn('Firestore users subscription error:', error);
+      useAuthStore.setState({ isLoadingUsers: false });
+    }
+  );
+
+  return unsubscribeUsers;
+}
+
+// Automatically start listening to Cloud Firestore API
+initUsersFirestoreListener();

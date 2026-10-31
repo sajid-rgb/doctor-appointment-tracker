@@ -1,6 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,9 +19,12 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    if (loading) return;
     setError('');
 
     if (!email.trim() || !password) {
@@ -27,21 +32,33 @@ export default function LoginScreen() {
       return;
     }
 
-    const message = login(email, password);
+    setLoading(true);
 
-    if (message) {
-      setError(message);
-      return;
-    }
+    try {
+      const message = await login(email, password);
 
-    const loggedInUser = useAuthStore.getState().user;
+      if (message) {
+        setError(message);
+        Alert.alert('Login Failed', message);
+        return;
+      }
 
-    if (loggedInUser?.role === 'admin') {
-      router.replace('/dashboard');
-    } else if (loggedInUser?.role === 'doctor') {
-      router.replace('/(doctor)');
-    } else {
-      router.replace('/(tabs)');
+      const loggedInUser = useAuthStore.getState().user;
+
+      if (loggedInUser?.role === 'admin') {
+        router.replace('/dashboard');
+      } else if (loggedInUser?.role === 'doctor') {
+        router.replace('/(doctor)');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } catch (err: any) {
+      const msg =
+        err?.message || 'An unexpected error occurred. Please try again.';
+      setError(msg);
+      Alert.alert('Login Error', msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -67,22 +84,45 @@ export default function LoginScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           style={styles.input}
+          editable={!loading}
         />
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Enter your password"
-          secureTextEntry
-          autoCapitalize="none"
-          style={styles.input}
-        />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Enter your password"
+            secureTextEntry={!showPassword}
+            autoCapitalize="none"
+            style={styles.passwordInput}
+            editable={!loading}
+          />
+          <Pressable
+            onPress={() => setShowPassword((prev) => !prev)}
+            accessibilityLabel={
+              showPassword ? 'Hide password' : 'Show password'
+            }
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              size={22}
+              color="#64748B"
+            />
+          </Pressable>
+        </View>
 
         {!!error && <Text style={styles.error}>{error}</Text>}
 
-        <Pressable style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Login</Text>
+        <Pressable
+          style={[styles.button, loading && styles.disabledButton]}
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? 'Logging in...' : 'Login'}
+          </Text>
         </Pressable>
 
         <View style={styles.footer}>
@@ -133,12 +173,31 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     fontSize: 16,
   },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    marginBottom: 18,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#0F172A',
+  },
   button: {
     backgroundColor: '#0F766E',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 4,
+  },
+  disabledButton: {
+    opacity: 0.65,
   },
   buttonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
   error: { color: '#DC2626', marginBottom: 12 },

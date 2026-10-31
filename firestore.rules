@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // Option A (Recommended for quick testing):
+    // Allow read/write for all authenticated users
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Option B (Detailed collection-level rules):
+    // -------------------------------------------------------------------------
+    // Users collection (Patients, Doctors, Admins)
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Doctors collection
+    match /doctors/{doctorId} {
+      allow read: if true; // Patients need to browse doctors
+      allow write: if request.auth != null;
+    }
+
+    // Appointments collection
+    match /appointments/{appointmentId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

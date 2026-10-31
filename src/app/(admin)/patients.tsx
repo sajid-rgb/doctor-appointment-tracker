@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -14,6 +15,7 @@ import { useAuthStore } from '../../store/authStore';
 export default function PatientManagementScreen() {
   const router = useRouter();
   const users = useAuthStore((state) => state.users);
+  const deleteUser = useAuthStore((state) => state.deleteUser);
   const [search, setSearch] = useState('');
 
   const patients = useMemo(() => {
@@ -27,6 +29,27 @@ export default function PatientManagementScreen() {
           user.email.toLowerCase().includes(query))
     );
   }, [users, search]);
+
+  const handleDeletePatient = (id: string, name: string) => {
+    Alert.alert(
+      'Delete Patient',
+      `Are you sure you want to permanently delete patient "${name}"? This will remove their account and data.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteUser(id);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Failed to delete patient account.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.screen}>
@@ -90,6 +113,14 @@ export default function PatientManagementScreen() {
                 <Text style={styles.statusText}>REGISTERED</Text>
               </View>
             </View>
+
+            <Pressable
+              style={styles.deleteButton}
+              onPress={() => handleDeletePatient(item.id, item.name || item.email)}
+              accessibilityLabel="Delete patient"
+            >
+              <Ionicons name="trash-outline" size={20} color="#EF4444" />
+            </Pressable>
           </View>
         )}
         ListEmptyComponent={
@@ -195,6 +226,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#D1FAE5',
   },
   statusText: { fontSize: 10, fontWeight: '800', color: '#047857' },
+  deleteButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   empty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 20 },
   emptyTitle: {
     fontSize: 17,

@@ -1,6 +1,13 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+
+import {
+  deleteAppointmentFromFirestore,
+  fetchAppointmentsFromFirestore,
+  saveAppointmentToFirestore,
+  subscribeToAppointments,
+  updateAppointmentSerialInFirestore,
+  updateAppointmentStatusInFirestore,
+} from '../services/appointmentService';
 
 export type AppointmentStatus =
   | 'pending'
@@ -96,118 +103,152 @@ export function isSerialNumberTaken(
 
 type AppointmentState = {
   appointments: Appointment[];
+  isLoading: boolean;
   addAppointment: (appointment: NewAppointment) => Appointment;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => void;
   updateAppointmentSerial: (id: string, serialNumber: string) => void;
   cancelAppointment: (id: string) => void;
+  deleteAppointment: (id: string) => Promise<void>;
   getNextSerialNumber: (doctorId: string, date: string) => string;
+  fetchAppointments: () => Promise<void>;
 };
 
-export const useAppointmentStore = create<AppointmentState>()(
-  persist(
-    (set, get) => ({
-      appointments: [],
+export const useAppointmentStore = create<AppointmentState>()((set, get) => ({
+  appointments: [],
+  isLoading: true,
 
-      getNextSerialNumber: (doctorId: string, date: string) => {
-        return generateUniqueSerialNumber(doctorId, date, get().appointments);
-      },
-
-      addAppointment: (newAppointment) => {
-        const currentList = get().appointments;
-        const serial =
-          newAppointment.serialNumber ||
-          generateUniqueSerialNumber(
-            newAppointment.doctorId,
-            newAppointment.date,
-            currentList
-          );
-
-        const created: Appointment = {
-          ...newAppointment,
-          serialNumber: serial,
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-        };
-
-        set((state) => ({
-          appointments: [created, ...state.appointments],
-        }));
-
-        return created;
-      },
-
-      updateAppointmentStatus: (id, status) =>
-        set((state) => ({
-          appointments: state.appointments.map((appointment) =>
-            appointment.id === id ? { ...appointment, status } : appointment
-          ),
-        })),
-
-      updateAppointmentSerial: (id, serialNumber) =>
-        set((state) => ({
-          appointments: state.appointments.map((appointment) =>
-            appointment.id === id
-              ? { ...appointment, serialNumber: serialNumber.trim() }
-              : appointment
-          ),
-        })),
-
-      cancelAppointment: (id) =>
-        set((state) => ({
-          appointments: state.appointments.map((appointment) =>
-            appointment.id === id &&
-            (appointment.status === 'pending' ||
-              appointment.status === 'confirmed')
-              ? { ...appointment, status: 'cancelled' }
-              : appointment
-          ),
-        })),
-    }),
-    {
-      name: 'carepoint-appointments',
-      storage: createJSONStorage(() => AsyncStorage),
-      version: 3,
-      migrate: (persistedState: any, version: number) => {
-        if (persistedState && Array.isArray(persistedState.appointments)) {
-          let updated = persistedState.appointments;
-
-          // Version 2 cleanup of dummy doctors
-          if (version < 2) {
-            updated = updated.filter(
-              (item: any) =>
-                !['1', '2', '3', '4'].includes(item?.doctorId) &&
-                ![
-                  'Dr. Sarah Ahmed',
-                  'Dr. Tanvir Hasan',
-                  'Dr. Nusrat Jahan',
-                  'Dr. Imran Chowdhury',
-                ].includes(item?.doctorName)
-            );
-          }
-
-          // Version 3: ensure every appointment has a serialNumber
-          if (version < 3) {
-            const counts: Record<string, number> = {};
-            updated = updated.map((apt: any) => {
-              if (apt.serialNumber) return apt;
-              const key = `${apt.doctorId}_${apt.date}`;
-              counts[key] = (counts[key] || 0) + 1;
-              return {
-                ...apt,
-                serialNumber: `SL-${String(counts[key]).padStart(2, '0')}`,
-              };
-            });
-          }
-
-          return {
-            ...persistedState,
-            appointments: updated,
-          };
-        }
-
-        return persistedState;
-      },
+  fetchAppointments: async () => {
+    set({ isLoading: true });
+    try {
+      const appointments = await fetchAppointmentsFromFirestore();
+      set({ appointments, isLoading: false });
+    } catch {
+      set({ isLoading: false });
     }
-  )
-);
+  },
+
+  getNextSerialNumber: (doctorId: string, date: string) => {
+    return generateUniqueSerialNumber(doctorId, date, get().appointments);
+  },
+
+  addAppointment: (newAppointment) => {
+    const currentList = get().appointments;
+    const serial =
+      newAppointment.serialNumber ||
+      generateUniqueSerialNumber(
+        newAppointment.doctorId,
+        newAppointment.date,
+        currentList
+      );
+
+    const created: Appointment = {
+      ...newAppointment,
+      serialNumber: serial,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    // Optimistic local update
+    set((state) => ({
+      appointments: [created, ...state.appointments],
+    }));
+
+    // Persist to Cloud Firestore API
+    saveAppointmentToFirestore(created).catch((err) => {
+      console.warn('Failed to save appointment to Firestore API:', err);
+    });
+
+    return created;
+  },
+
+  updateAppointmentStatus: (id, status) => {
+    // Optimistic local update
+    set((state) => ({
+      appointments: state.appointments.map((appointment) =>
+        appointment.id === id ? { ...appointment, status } : appointment
+      ),
+    }));
+
+    // Sync to Cloud Firestore API
+    updateAppointmentStatusInFirestore(id, status).catch((err) => {
+      console.warn('Failed to update appointment status in Firestore API:', err);
+    });
+  },
+
+  updateAppointmentSerial: (id, serialNumber) => {
+    const cleanSerial = serialNumber.trim();
+
+    // Optimistic local update
+    set((state) => ({
+      appointments: state.appointments.map((appointment) =>
+        appointment.id === id
+          ? { ...appointment, serialNumber: cleanSerial }
+          : appointment
+      ),
+    }));
+
+    // Sync to Cloud Firestore API
+    updateAppointmentSerialInFirestore(id, cleanSerial).catch((err) => {
+      console.warn('Failed to update appointment serial in Firestore API:', err);
+    });
+  },
+
+  cancelAppointment: (id) => {
+    // Optimistic local update
+    set((state) => ({
+      appointments: state.appointments.map((appointment) =>
+        appointment.id === id &&
+        (appointment.status === 'pending' || appointment.status === 'confirmed')
+          ? { ...appointment, status: 'cancelled' }
+          : appointment
+      ),
+    }));
+
+    // Sync to Cloud Firestore API
+    updateAppointmentStatusInFirestore(id, 'cancelled').catch((err) => {
+      console.warn('Failed to cancel appointment in Firestore API:', err);
+    });
+  },
+
+  deleteAppointment: async (id) => {
+    // Optimistic local update
+    set((state) => ({
+      appointments: state.appointments.filter(
+        (appointment) => appointment.id !== id
+      ),
+    }));
+
+    // Sync to Cloud Firestore API
+    try {
+      await deleteAppointmentFromFirestore(id);
+    } catch (err) {
+      console.warn('Failed to delete appointment from Firestore API:', err);
+    }
+  },
+}));
+
+// Real-time Cloud Firestore subscription for appointments
+let unsubscribeAppointments: (() => void) | null = null;
+
+export function initAppointmentsFirestoreListener(): () => void {
+  if (unsubscribeAppointments) return unsubscribeAppointments;
+
+  unsubscribeAppointments = subscribeToAppointments(
+    (appointments) => {
+      useAppointmentStore.setState({
+        appointments,
+        isLoading: false,
+      });
+    },
+    (error) => {
+      console.warn('Firestore appointments subscription error:', error);
+      useAppointmentStore.setState({ isLoading: false });
+    }
+  );
+
+  return unsubscribeAppointments;
+}
+
+// Automatically start listening to Cloud Firestore API
+initAppointmentsFirestoreListener();

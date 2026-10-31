@@ -21,6 +21,7 @@ import {
   isSerialNumberTaken,
   useAppointmentStore,
 } from '../../store/appointmentStore';
+import { notifyPatientAppointmentStatus } from '../../utils/notifications';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
 
 type Filter = 'all' | AppointmentStatus;
@@ -58,6 +59,9 @@ export default function AdminAppointmentsScreen() {
   );
   const updateAppointmentSerial = useAppointmentStore(
     (state) => state.updateAppointmentSerial
+  );
+  const deleteAppointment = useAppointmentStore(
+    (state) => state.deleteAppointment
   );
 
   const [filter, setFilter] = useState<Filter>('all');
@@ -100,6 +104,11 @@ export default function AdminAppointmentsScreen() {
           onPress: () => {
             updateStatus(appointment.id, status);
 
+            // Notify the patient after confirmation or status update
+            notifyPatientAppointmentStatus(appointment, status).catch((err) => {
+              console.warn('Failed to notify patient of status change:', err);
+            });
+
             if (status === 'confirmed') {
               Alert.alert(
                 'Appointment Confirmed',
@@ -112,6 +121,27 @@ export default function AdminAppointmentsScreen() {
                   },
                 ]
               );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteAppointment = (appointment: Appointment) => {
+    Alert.alert(
+      'Delete Appointment',
+      `Are you sure you want to permanently delete the appointment for "${appointment.patientName || 'Patient'}" with ${appointment.doctorName} (Serial: ${appointment.serialNumber || 'SL-01'})? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAppointment(appointment.id);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Failed to delete appointment');
             }
           },
         },
@@ -292,14 +322,25 @@ export default function AdminAppointmentsScreen() {
                 </Text>
               </View>
 
-              <TouchableOpacity
-                style={styles.manageSerialButton}
-                activeOpacity={0.7}
-                onPress={() => handleOpenSerialManager(item)}
-              >
-                <Ionicons name="create-outline" size={14} color="#0F766E" />
-                <Text style={styles.manageSerialText}>Manage Serial</Text>
-              </TouchableOpacity>
+              <View style={styles.serialActionsGroup}>
+                <TouchableOpacity
+                  style={styles.manageSerialButton}
+                  activeOpacity={0.7}
+                  onPress={() => handleOpenSerialManager(item)}
+                >
+                  <Ionicons name="create-outline" size={14} color="#0F766E" />
+                  <Text style={styles.manageSerialText}>Manage Serial</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.deleteAppointmentButton}
+                  activeOpacity={0.7}
+                  onPress={() => handleDeleteAppointment(item)}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#EF4444" />
+                  <Text style={styles.deleteAppointmentText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Patient Name Banner */}
@@ -744,6 +785,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#0F766E',
+  },
+  serialActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteAppointmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+  },
+  deleteAppointmentText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
   },
   patientBanner: {
     flexDirection: 'row',
