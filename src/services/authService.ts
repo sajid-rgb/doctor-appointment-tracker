@@ -214,15 +214,6 @@ export async function signUpWithFirebase(
     );
     const firebaseUser = userCredential.user;
 
-    // 2. Set Firebase displayName
-    if (cleanName) {
-      try {
-        await updateProfile(firebaseUser, { displayName: cleanName });
-      } catch (profileErr) {
-        console.warn('Firebase updateProfile warning:', profileErr);
-      }
-    }
-
     const authUser: AuthUser = {
       id: firebaseUser.uid,
       name: cleanName,
@@ -230,24 +221,35 @@ export async function signUpWithFirebase(
       role,
     };
 
-    // 3. Attempt to initialize user document in Cloud Firestore (with 10000ms timeout)
-    try {
-      const newUserData: AuthUser & { createdAt: string } = {
-        ...authUser,
-        createdAt: new Date().toISOString(),
-      };
-      const userDocRef = doc(db, USERS_COLLECTION, firebaseUser.uid);
-      const sanitized = sanitizeForFirestore(newUserData);
-      await withTimeout(setDoc(userDocRef, sanitized), 10000);
-    } catch (firestoreError: any) {
-      console.warn(
-        'Firestore user creation non-fatal warning (timeout or Datastore mode):',
-        firestoreError?.message || firestoreError
-      );
-    }
+    const newUserData: AuthUser & { createdAt: string } = {
+      ...authUser,
+      createdAt: new Date().toISOString(),
+    };
+    const userDocRef = doc(db, USERS_COLLECTION, firebaseUser.uid);
+    const sanitized = sanitizeForFirestore(newUserData);
 
-    const token = await firebaseUser.getIdToken().catch(() => firebaseUser.uid);
-    return { user: authUser, token, error: null };
+    // 2. Run profile update, Firestore document initialization, and token retrieval in PARALLEL
+    const updateProfilePromise = cleanName
+      ? updateProfile(firebaseUser, { displayName: cleanName }).catch((err) => {
+          console.warn('Firebase updateProfile warning:', err);
+        })
+      : Promise.resolve();
+
+    const firestorePromise = withTimeout(setDoc(userDocRef, sanitized), 5000).catch(
+      (firestoreError: any) => {
+        console.warn('Firestore user creation warning:', firestoreError?.message || firestoreError);
+      }
+    );
+
+    const tokenPromise = firebaseUser.getIdToken().catch(() => firebaseUser.uid);
+
+    const [, , token] = await Promise.all([
+      updateProfilePromise,
+      firestorePromise,
+      tokenPromise,
+    ]);
+
+    return { user: authUser, token: token || firebaseUser.uid, error: null };
   } catch (error: any) {
     console.error('Firebase signUp error:', error);
     return { user: null, token: null, error: formatFirebaseAuthError(error) };
@@ -256,7 +258,7 @@ export async function signUpWithFirebase(
 
 /**
  * Signs in an existing user using Firebase Authentication and loads profile data.
- * Protected with a timeout so login always succeeds and redirects even if Firestore is slow/offline.
+ * Protected with a timeout so login always succeeds and redirects quickly even if Firestore is slow/offline.
  */
 export async function loginWithFirebase(
   email: string,
@@ -273,32 +275,28 @@ export async function loginWithFirebase(
     );
     const firebaseUser = userCredential.user;
 
-    // 2. Retrieve user document from Cloud Firestore with timeout protection
+    // 2. Fetch user profile from Cloud Firestore and token in parallel
+    const userDocRef = doc(db, USERS_COLLECTION, firebaseUser.uid);
+
+    const [userSnapshot, token] = await Promise.all([
+      withTimeout(getDoc(userDocRef), 4000, null as any).catch((err) => {
+        console.warn('Firestore profile fetch timed out or network slow:', err);
+        return null;
+      }),
+      firebaseUser.getIdToken().catch(() => firebaseUser.uid),
+    ]);
+
     let role: UserRole = 'patient';
     let profileData: Partial<AuthUser> = {};
 
-    try {
-      const userDocRef = doc(db, USERS_COLLECTION, firebaseUser.uid);
-      const userSnapshot = await withTimeout(
-        getDoc(userDocRef),
-        10000,
-        null as any
-      );
-
-      if (
-        userSnapshot &&
-        typeof userSnapshot.exists === 'function' &&
-        userSnapshot.exists()
-      ) {
-        const data = userSnapshot.data() as Partial<AuthUser>;
-        role = (data.role as UserRole) || 'patient';
-        profileData = data;
-      }
-    } catch (firestoreError) {
-      console.warn(
-        'Firestore user profile fetch timed out or offline:',
-        firestoreError
-      );
+    if (
+      userSnapshot &&
+      typeof userSnapshot.exists === 'function' &&
+      userSnapshot.exists()
+    ) {
+      const data = userSnapshot.data() as Partial<AuthUser>;
+      role = (data.role as UserRole) || 'patient';
+      profileData = data;
     }
 
     const authUser: AuthUser = {
@@ -319,8 +317,7 @@ export async function loginWithFirebase(
       medicalHistory: profileData.medicalHistory,
     };
 
-    const token = await firebaseUser.getIdToken().catch(() => firebaseUser.uid);
-    return { user: authUser, token, error: null };
+    return { user: authUser, token: token || firebaseUser.uid, error: null };
   } catch (error: any) {
     console.error('Firebase login error:', error);
     return { user: null, token: null, error: formatFirebaseAuthError(error) };

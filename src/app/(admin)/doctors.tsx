@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -7,8 +8,10 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
+import { ApiSyncIndicator } from '../../components/ApiSyncIndicator';
 import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useDoctorStore } from '../../store/doctorStore';
 
@@ -19,6 +22,7 @@ export default function AdminDoctorsScreen() {
   const updateStatus = useDoctorStore((state) => state.updateApprovalStatus);
   const deleteDoctor = useDoctorStore((state) => state.deleteDoctor);
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     fetchDoctors();
@@ -30,9 +34,19 @@ export default function AdminDoctorsScreen() {
     setRefreshing(false);
   };
 
-  const pendingDoctors = doctors.filter(
-    (doctor) => doctor.approvalStatus === 'pending'
-  );
+  const pendingDoctors = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return doctors.filter(
+      (doctor) =>
+        doctor.approvalStatus === 'pending' &&
+        (!query ||
+          doctor.name.toLowerCase().includes(query) ||
+          doctor.specialty.toLowerCase().includes(query) ||
+          doctor.email.toLowerCase().includes(query) ||
+          doctor.qualification?.toLowerCase().includes(query) ||
+          doctor.hospital?.toLowerCase().includes(query))
+    );
+  }, [doctors, search]);
 
   const reviewDoctor = (id: string, status: 'approved' | 'rejected') => {
     Alert.alert(
@@ -75,6 +89,27 @@ export default function AdminDoctorsScreen() {
       <Text style={styles.subtitle}>
         {pendingDoctors.length} doctor(s) awaiting review
       </Text>
+      <ApiSyncIndicator
+        isSyncing={isLoading && !refreshing}
+        label="Syncing doctor applications..."
+      />
+
+      <View style={styles.searchBox}>
+        <Ionicons name="search-outline" size={20} color="#64748B" />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search pending doctors by name, specialty..."
+          placeholderTextColor="#94A3B8"
+          style={styles.searchInput}
+          autoCapitalize="none"
+        />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          </Pressable>
+        )}
+      </View>
 
       <FlatList
         data={pendingDoctors}
@@ -148,6 +183,30 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F8FAFC', padding: 20 },
   title: { fontSize: 26, fontWeight: '800', color: '#0F172A' },
   subtitle: { color: '#64748B', marginTop: 6 },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    height: 48,
+    marginTop: 14,
+    marginBottom: 4,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    paddingVertical: 0,
+  },
   card: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,

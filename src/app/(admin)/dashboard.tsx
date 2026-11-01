@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { ApiSyncIndicator } from '../../components/ApiSyncIndicator';
 import { NotificationBell } from '../../components/NotificationBell';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
@@ -21,10 +22,13 @@ export default function AdminDashboard() {
   const logout = useAuthStore((state) => state.logout);
 
   const users = useAuthStore((state) => state.users);
+  const isLoadingUsers = useAuthStore((state) => state.isLoadingUsers);
   const fetchUsers = useAuthStore((state) => state.fetchUsers);
   const doctors = useDoctorStore((state) => state.doctors);
+  const isLoadingDoctors = useDoctorStore((state) => state.isLoading);
   const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
   const appointments = useAppointmentStore((state) => state.appointments);
+  const isLoadingAppointments = useAppointmentStore((state) => state.isLoading);
   const fetchAppointments = useAppointmentStore(
     (state) => state.fetchAppointments
   );
@@ -112,6 +116,11 @@ export default function AdminDashboard() {
           </View>
         </View>
 
+        <ApiSyncIndicator
+          isSyncing={(isLoadingUsers || isLoadingDoctors || isLoadingAppointments) && !refreshing}
+          label="Syncing admin statistics..."
+        />
+
         <View style={styles.welcome}>
           <Text style={styles.welcomeTitle}>Dashboard Overview</Text>
           <Text style={styles.welcomeSubtitle}>
@@ -197,7 +206,7 @@ export default function AdminDashboard() {
           <Ionicons name="chevron-forward" size={21} color="#94A3B8" />
         </Pressable>
 
-        <Text style={styles.footer}>CarePoint Admin • Demo Version</Text>
+        <Text style={styles.footer}>CarePoint Healthcare System</Text>
       </ScrollView>
     </View>
   );

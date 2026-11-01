@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -10,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { ApiSyncIndicator } from '../../components/ApiSyncIndicator';
 import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
@@ -19,10 +21,12 @@ export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const appointments = useAppointmentStore((state) => state.appointments);
+  const isLoadingAppointments = useAppointmentStore((state) => state.isLoading);
   const fetchAppointments = useAppointmentStore(
     (state) => state.fetchAppointments
   );
   const doctors = useDoctorStore((state) => state.doctors);
+  const isLoadingDoctors = useDoctorStore((state) => state.isLoading);
   const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -94,6 +98,11 @@ export default function DashboardScreen() {
         </View>
       </View>
 
+      <ApiSyncIndicator
+        isSyncing={(isLoadingAppointments || isLoadingDoctors) && !refreshing}
+        label="Syncing healthcare data..."
+      />
+
       <View style={styles.banner}>
         <Text style={styles.bannerTitle}>Your health at a glance</Text>
         <Text style={styles.bannerSubtitle}>
@@ -123,20 +132,29 @@ export default function DashboardScreen() {
       </View>
 
       {recentAppointments.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="calendar-outline" size={38} color="#94A3B8" />
-          <Text style={styles.emptyTitle}>No appointments yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Find an approved doctor and book your consultation.
-          </Text>
-          <Pressable
-            style={styles.bookDoctorBtn}
-            onPress={() => router.push('/(tabs)/doctors')}
-          >
-            <Ionicons name="search" size={16} color="#FFFFFF" />
-            <Text style={styles.bookDoctorBtnText}>Find Doctors</Text>
-          </Pressable>
-        </View>
+        isLoadingAppointments ? (
+          <View style={[styles.emptyContainer, { paddingVertical: 32 }]}>
+            <ActivityIndicator size="large" color="#0F766E" />
+            <Text style={[styles.emptySubtitle, { marginTop: 10 }]}>
+              Loading your appointments...
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="calendar-outline" size={38} color="#94A3B8" />
+            <Text style={styles.emptyTitle}>No appointments yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Find an approved doctor and book your consultation.
+            </Text>
+            <Pressable
+              style={styles.bookDoctorBtn}
+              onPress={() => router.push('/(tabs)/doctors')}
+            >
+              <Ionicons name="search" size={16} color="#FFFFFF" />
+              <Text style={styles.bookDoctorBtnText}>Find Doctors</Text>
+            </Pressable>
+          </View>
+        )
       ) : (
         recentAppointments.map((item) => {
           const isCompleted = item.status === 'completed';

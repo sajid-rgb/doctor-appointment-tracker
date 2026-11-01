@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -21,6 +22,7 @@ import {
   type AppointmentStatus,
 } from '../../store/appointmentStore';
 import { DoctorAvatar } from '../../components/DoctorAvatar';
+import { ApiSyncIndicator } from '../../components/ApiSyncIndicator';
 import { useDoctorStore } from '../../store/doctorStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
@@ -199,10 +201,9 @@ export default function PatientAppointmentsScreen() {
   };
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
-
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   const [calendarVisible, setCalendarVisible] = useState(false);
 
@@ -217,6 +218,8 @@ export default function PatientAppointmentsScreen() {
   );
 
   const filteredAppointments = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
     return appointments
       .filter((appointment) => {
         const matchesStatus =
@@ -239,7 +242,17 @@ export default function PatientAppointmentsScreen() {
           matchesDate = !!selectedDate && appointmentISO === selectedDate;
         }
 
-        return matchesStatus && matchesDate;
+        const matchesSearch =
+          !query ||
+          appointment.doctorName?.toLowerCase().includes(query) ||
+          appointment.specialty?.toLowerCase().includes(query) ||
+          appointment.serialNumber?.toLowerCase().includes(query) ||
+          appointment.date?.toLowerCase().includes(query) ||
+          appointment.time?.toLowerCase().includes(query) ||
+          appointment.condition?.toLowerCase().includes(query) ||
+          appointment.additionalNotes?.toLowerCase().includes(query);
+
+        return matchesStatus && matchesDate && matchesSearch;
       })
       .sort((a, b) => {
         const dateA = parseAppointmentDate(a.date) ?? '';
@@ -252,6 +265,7 @@ export default function PatientAppointmentsScreen() {
     statusFilter,
     dateFilter,
     selectedDate,
+    search,
     todayISO,
     nextWeekISO,
   ]);
@@ -491,6 +505,23 @@ export default function PatientAppointmentsScreen() {
         </Text>
       </View>
 
+      <View style={styles.searchBox}>
+        <Ionicons name="search-outline" size={20} color="#64748B" />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search doctor, serial, date, specialty..."
+          placeholderTextColor="#94A3B8"
+          style={styles.searchInput}
+          autoCapitalize="none"
+        />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          </Pressable>
+        )}
+      </View>
+
       <View style={styles.filterSection}>
         <Text style={styles.filterLabel}>Status</Text>
 
@@ -605,6 +636,11 @@ export default function PatientAppointmentsScreen() {
         )}
       </View>
 
+      <ApiSyncIndicator
+        isSyncing={isLoading && !refreshing}
+        label="Syncing appointments..."
+      />
+
       <View style={styles.resultsHeader}>
         <Text style={styles.resultsTitle}>Your visits</Text>
         <Text style={styles.resultsCount}>
@@ -663,6 +699,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     marginTop: 6,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    marginHorizontal: 20,
+    height: 48,
+    marginTop: 10,
+    marginBottom: 8,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    paddingVertical: 0,
   },
   filterSection: {
     paddingBottom: 12,

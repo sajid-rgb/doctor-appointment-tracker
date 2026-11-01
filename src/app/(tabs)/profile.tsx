@@ -241,7 +241,7 @@ export default function PatientProfileScreen() {
                     style={styles.input}
                     value={age}
                     onChangeText={setAge}
-                    placeholder="e.g. 28"
+                    placeholder="Enter age"
                     placeholderTextColor="#94A3B8"
                     keyboardType="numeric"
                   />
@@ -279,7 +279,7 @@ export default function PatientProfileScreen() {
                   style={styles.input}
                   value={phone}
                   onChangeText={setPhone}
-                  placeholder="e.g. 01700000000"
+                  placeholder="Contact phone number"
                   placeholderTextColor="#94A3B8"
                   keyboardType="phone-pad"
                 />
@@ -319,7 +319,7 @@ export default function PatientProfileScreen() {
                   style={styles.input}
                   value={address}
                   onChangeText={setAddress}
-                  placeholder="e.g. Dhanmondi, Dhaka"
+                  placeholder="Residential address"
                   placeholderTextColor="#94A3B8"
                 />
               </View>
@@ -330,7 +330,7 @@ export default function PatientProfileScreen() {
                   style={styles.input}
                   value={emergencyContact}
                   onChangeText={setEmergencyContact}
-                  placeholder="e.g. Relative's phone number"
+                  placeholder="Emergency contact phone number"
                   placeholderTextColor="#94A3B8"
                   keyboardType="phone-pad"
                 />
@@ -344,7 +344,7 @@ export default function PatientProfileScreen() {
                   style={[styles.input, styles.textArea]}
                   value={medicalHistory}
                   onChangeText={setMedicalHistory}
-                  placeholder="e.g. Diabetes, Hypertension, Penicillin allergy..."
+                  placeholder="Medical history, allergies, chronic conditions..."
                   placeholderTextColor="#94A3B8"
                   multiline
                   numberOfLines={3}

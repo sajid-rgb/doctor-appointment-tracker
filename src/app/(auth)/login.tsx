@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -79,7 +80,7 @@ export default function LoginScreen() {
         <TextInput
           value={email}
           onChangeText={setEmail}
-          placeholder="you@example.com"
+          placeholder="Enter your email"
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
@@ -120,9 +121,14 @@ export default function LoginScreen() {
           onPress={handleLogin}
           disabled={loading}
         >
-          <Text style={styles.buttonText}>
-            {loading ? 'Logging in...' : 'Login'}
-          </Text>
+          {loading ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.buttonText}>Signing in...</Text>
+            </View>
+          ) : (
+            <Text style={styles.buttonText}>Login</Text>
+          )}
         </Pressable>
 
         <View style={styles.footer}>
@@ -131,8 +137,6 @@ export default function LoginScreen() {
             Sign Up
           </Link>
         </View>
-
-        <Text style={styles.demoNote}>Admin demo: admin@admin.com</Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -208,10 +212,4 @@ const styles = StyleSheet.create({
   },
   footerText: { color: '#64748B' },
   link: { color: '#0F766E', fontWeight: '700' },
-  demoNote: {
-    textAlign: 'center',
-    color: '#64748B',
-    fontSize: 12,
-    marginTop: 24,
-  },
 });

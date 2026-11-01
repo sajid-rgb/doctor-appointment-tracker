@@ -18,7 +18,7 @@ import {
   updateDoctorInFirestore,
   updateDoctorStatusInFirestore,
 } from '../services/doctorService';
-import { safeAsyncStorage } from './authStore';
+import { safeAsyncStorage } from './storage';
 
 export type { DoctorApprovalStatus, DoctorProfile };
 

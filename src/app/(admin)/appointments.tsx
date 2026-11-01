@@ -65,6 +65,7 @@ export default function AdminAppointmentsScreen() {
   );
 
   const [filter, setFilter] = useState<Filter>('all');
+  const [search, setSearch] = useState('');
 
   // Serial Management Modal State
   const [editingAppointment, setEditingAppointment] =
@@ -72,13 +73,29 @@ export default function AdminAppointmentsScreen() {
   const [serialInput, setSerialInput] = useState('');
   const [serialError, setSerialError] = useState('');
 
-  const filtered = useMemo(
-    () =>
-      filter === 'all'
-        ? appointments
-        : appointments.filter((item) => item.status === filter),
-    [appointments, filter]
-  );
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return appointments.filter((item) => {
+      const matchesStatus = filter === 'all' || item.status === filter;
+      if (!matchesStatus) return false;
+
+      if (!query) return true;
+
+      return (
+        item.patientName?.toLowerCase().includes(query) ||
+        item.doctorName?.toLowerCase().includes(query) ||
+        item.serialNumber?.toLowerCase().includes(query) ||
+        item.patientPhone?.toLowerCase().includes(query) ||
+        item.specialty?.toLowerCase().includes(query) ||
+        item.date?.toLowerCase().includes(query) ||
+        item.time?.toLowerCase().includes(query) ||
+        item.bloodGroup?.toLowerCase().includes(query) ||
+        item.condition?.toLowerCase().includes(query) ||
+        item.additionalNotes?.toLowerCase().includes(query)
+      );
+    });
+  }, [appointments, filter, search]);
 
   const notifyViaWhatsApp = (appointment: Appointment) => {
     sendWhatsAppNotification({
@@ -219,6 +236,24 @@ export default function AdminAppointmentsScreen() {
       <View style={styles.summary}>
         <Text style={styles.summaryNumber}>{appointments.length}</Text>
         <Text style={styles.summaryLabel}>Total appointments</Text>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchBox}>
+        <Ionicons name="search-outline" size={20} color="#64748B" />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search patient, doctor, serial, phone..."
+          placeholderTextColor="#94A3B8"
+          style={styles.searchInput}
+          autoCapitalize="none"
+        />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          </Pressable>
+        )}
       </View>
 
       {/* Visible Horizontal Filter Chips Bar */}
@@ -560,7 +595,7 @@ export default function AdminAppointmentsScreen() {
                     setSerialInput(val);
                     if (serialError) setSerialError('');
                   }}
-                  placeholder="e.g. SL-01, SL-02"
+                  placeholder="Enter serial number (SL-01)"
                   placeholderTextColor="#94A3B8"
                   autoCapitalize="characters"
                 />
@@ -647,6 +682,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    marginHorizontal: 16,
+    height: 48,
+    marginBottom: 10,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    paddingVertical: 0,
   },
   summaryNumber: { fontSize: 26, fontWeight: '800', color: '#0F766E' },
   summaryLabel: { color: '#64748B', fontSize: 13, fontWeight: '600' },

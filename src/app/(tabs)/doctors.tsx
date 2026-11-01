@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { DoctorAvatar } from '../../components/DoctorAvatar';
+import { ApiSyncIndicator } from '../../components/ApiSyncIndicator';
 import { useDoctorStore } from '../../store/doctorStore';
 
 export default function DoctorsScreen() {
@@ -54,8 +55,12 @@ export default function DoctorsScreen() {
       const matchesSpecialty =
         specialty === 'All' || doctor.specialty === specialty;
       const matchesSearch =
+        !query ||
         doctor.name.toLowerCase().includes(query) ||
-        doctor.specialty.toLowerCase().includes(query);
+        doctor.specialty.toLowerCase().includes(query) ||
+        doctor.qualification?.toLowerCase().includes(query) ||
+        doctor.hospital?.toLowerCase().includes(query) ||
+        doctor.bio?.toLowerCase().includes(query);
 
       return approved && matchesSpecialty && matchesSearch;
     });
@@ -67,16 +72,26 @@ export default function DoctorsScreen() {
       <Text style={styles.subtitle}>
         Browse approved doctors and book a consultation.
       </Text>
+      <ApiSyncIndicator
+        isSyncing={isLoading && !refreshing}
+        label="Syncing doctors list..."
+      />
 
       <View style={styles.searchBox}>
         <Ionicons name="search-outline" size={20} color="#64748B" />
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Search doctors or specialties"
+          placeholder="Search doctors, specialties, or hospitals"
+          placeholderTextColor="#94A3B8"
           style={styles.searchInput}
           autoCapitalize="none"
         />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          </Pressable>
+        )}
       </View>
 
       <FlatList

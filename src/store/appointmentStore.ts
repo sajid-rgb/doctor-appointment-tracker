@@ -9,7 +9,7 @@ import {
   updateAppointmentSerialInFirestore,
   updateAppointmentStatusInFirestore,
 } from '../services/appointmentService';
-import { safeAsyncStorage } from './authStore';
+import { safeAsyncStorage } from './storage';
 
 export type AppointmentStatus =
   | 'pending'
@@ -64,7 +64,8 @@ export function generateUniqueSerialNumber(
     (a) =>
       a.doctorId === doctorId &&
       a.date === date &&
-      a.status !== 'cancelled'
+      a.status !== 'cancelled' &&
+      a.status !== 'rejected'
   );
 
   const usedNumbers = new Set<number>();
@@ -99,6 +100,7 @@ export function isSerialNumberTaken(
       a.doctorId === doctorId &&
       a.date === date &&
       a.status !== 'cancelled' &&
+      a.status !== 'rejected' &&
       (a.serialNumber || '').trim().toUpperCase() === normalized
   );
 }

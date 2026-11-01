@@ -9,8 +9,10 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
+import { ApiSyncIndicator } from '../../components/ApiSyncIndicator';
 import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { DoctorApprovalStatus, useDoctorStore } from '../../store/doctorStore';
 
@@ -28,6 +30,7 @@ export default function DoctorReviewScreen() {
 
   const [filter, setFilter] = useState<FilterType>('pending');
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     fetchDoctors();
@@ -39,13 +42,26 @@ export default function DoctorReviewScreen() {
     setRefreshing(false);
   };
 
-  const filteredDoctors = useMemo(
-    () =>
-      filter === 'all'
-        ? doctors
-        : doctors.filter((doctor) => doctor.approvalStatus === filter),
-    [doctors, filter]
-  );
+  const filteredDoctors = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return doctors.filter((doctor) => {
+      const matchesStatus =
+        filter === 'all' || doctor.approvalStatus === filter;
+      if (!matchesStatus) return false;
+
+      if (!query) return true;
+
+      return (
+        doctor.name?.toLowerCase().includes(query) ||
+        doctor.specialty?.toLowerCase().includes(query) ||
+        doctor.email?.toLowerCase().includes(query) ||
+        doctor.qualification?.toLowerCase().includes(query) ||
+        doctor.hospital?.toLowerCase().includes(query) ||
+        doctor.phone?.toLowerCase().includes(query)
+      );
+    });
+  }, [doctors, filter, search]);
 
   const changeStatus = (
     doctorId: string,
@@ -184,6 +200,28 @@ export default function DoctorReviewScreen() {
         </View>
       </View>
 
+      <ApiSyncIndicator
+        isSyncing={isLoading && !refreshing}
+        label="Syncing doctors review list..."
+      />
+
+      <View style={styles.searchBox}>
+        <Ionicons name="search-outline" size={20} color="#64748B" />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search doctor by name, specialty, email..."
+          placeholderTextColor="#94A3B8"
+          style={styles.searchInput}
+          autoCapitalize="none"
+        />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          </Pressable>
+        )}
+      </View>
+
       <View style={styles.filters}>
         {(['pending', 'approved', 'rejected', 'all'] as FilterType[]).map(
           (item) => (
@@ -262,6 +300,30 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   title: { fontSize: 20, fontWeight: '800', color: '#0F172A' },
   subtitle: { fontSize: 12, color: '#64748B', marginTop: 4 },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    marginHorizontal: 16,
+    height: 48,
+    marginTop: 12,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    paddingVertical: 0,
+  },
   filters: {
     flexDirection: 'row',
     flexWrap: 'wrap',

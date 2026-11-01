@@ -60,11 +60,8 @@ if (Platform.OS === 'web') {
 }
 
 export { analytics };
-export * from '../services/authService';
-export * from '../services/doctorService';
-export * from '../services/appointmentService';
-export * from '../services/notificationService';
 export default app;
+
 
 
 

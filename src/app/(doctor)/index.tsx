@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { ApiSyncIndicator } from '../../components/ApiSyncIndicator';
 import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
@@ -139,7 +141,9 @@ export default function DoctorDashboard() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const appointments = useAppointmentStore((state) => state.appointments);
+  const isLoadingAppointments = useAppointmentStore((state) => state.isLoading);
   const doctors = useDoctorStore((state) => state.doctors);
+  const isLoadingDoctors = useDoctorStore((state) => state.isLoading);
   const currentDoctor = doctors.find(
     (d) =>
       d.id === user?.id ||
@@ -265,6 +269,11 @@ export default function DoctorDashboard() {
         </TouchableOpacity>
       </View>
 
+      <ApiSyncIndicator
+        isSyncing={(isLoadingAppointments || isLoadingDoctors) && !refreshing}
+        label="Syncing appointments..."
+      />
+
       {/* Summary cards */}
       <View style={styles.summaryRow}>
         <View style={styles.summaryCard}>
@@ -320,17 +329,26 @@ export default function DoctorDashboard() {
       </View>
 
       {todayAppointments.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="calendar-outline" size={34} color={TEAL} />
+        isLoadingAppointments ? (
+          <View style={[styles.emptyCard, { paddingVertical: 32 }]}>
+            <ActivityIndicator size="large" color={TEAL} />
+            <Text style={[styles.emptyText, { marginTop: 10 }]}>
+              Loading today's appointments...
+            </Text>
           </View>
+        ) : (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="calendar-outline" size={34} color={TEAL} />
+            </View>
 
-          <Text style={styles.emptyTitle}>No appointments today</Text>
+            <Text style={styles.emptyTitle}>No appointments today</Text>
 
-          <Text style={styles.emptyText}>
-            Appointments booked for today will appear here.
-          </Text>
-        </View>
+            <Text style={styles.emptyText}>
+              Appointments booked for today will appear here.
+            </Text>
+          </View>
+        )
       ) : (
         todayAppointments.map((appointment) => (
           <View key={appointment.id} style={styles.appointmentCard}>

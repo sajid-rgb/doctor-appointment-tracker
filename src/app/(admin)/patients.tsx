@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { ApiSyncIndicator } from '../../components/ApiSyncIndicator';
 import { useAuthStore } from '../../store/authStore';
 
 export default function PatientManagementScreen() {
@@ -41,7 +42,11 @@ export default function PatientManagementScreen() {
         user.role === 'patient' &&
         (!query ||
           user.name.toLowerCase().includes(query) ||
-          user.email.toLowerCase().includes(query))
+          user.email.toLowerCase().includes(query) ||
+          user.phone?.toLowerCase().includes(query) ||
+          user.bloodGroup?.toLowerCase().includes(query) ||
+          user.gender?.toLowerCase().includes(query) ||
+          user.address?.toLowerCase().includes(query))
     );
   }, [users, search]);
 
@@ -82,6 +87,11 @@ export default function PatientManagementScreen() {
         </View>
       </View>
 
+      <ApiSyncIndicator
+        isSyncing={isLoadingUsers && !refreshing}
+        label="Syncing patient accounts..."
+      />
+
       <View style={styles.summary}>
         <View style={styles.summaryIcon}>
           <Ionicons name="people-outline" size={25} color="#059669" />
@@ -97,7 +107,7 @@ export default function PatientManagementScreen() {
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Search by name or email..."
+          placeholder="Search by name, email, phone, blood group..."
           placeholderTextColor="#94A3B8"
           autoCapitalize="none"
           style={styles.searchInput}

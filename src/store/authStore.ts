@@ -27,28 +27,8 @@ import { initNotificationFirestoreListener, useNotificationStore } from './notif
 export const AUTH_TOKEN_STORAGE_KEY = 'carepoint_auth_token';
 const ADMIN_SESSION_TOKEN = 'carepoint-admin-session-token';
 
-export const safeAsyncStorage = {
-  getItem: async (key: string): Promise<string | null> => {
-    try {
-      if (Platform.OS === 'web' && typeof window === 'undefined') return null;
-      return await AsyncStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  setItem: async (key: string, value: string): Promise<void> => {
-    try {
-      if (Platform.OS === 'web' && typeof window === 'undefined') return;
-      await AsyncStorage.setItem(key, value);
-    } catch {}
-  },
-  removeItem: async (key: string): Promise<void> => {
-    try {
-      if (Platform.OS === 'web' && typeof window === 'undefined') return;
-      await AsyncStorage.removeItem(key);
-    } catch {}
-  },
-};
+import { safeAsyncStorage } from './storage';
+export { safeAsyncStorage };
 
 export type UserRole = 'patient' | 'doctor' | 'admin';
 type SignUpRole = 'patient' | 'doctor';

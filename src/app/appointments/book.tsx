@@ -78,6 +78,13 @@ export default function BookAppointmentScreen() {
   );
   const appointments = useAppointmentStore((state) => state.appointments);
   const addAppointment = useAppointmentStore((state) => state.addAppointment);
+  const fetchAppointments = useAppointmentStore(
+    (state) => state.fetchAppointments
+  );
+
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
 
   const doctor = doctors.find((item) => item.id === doctorId);
   const [fetchingDoctor, setFetchingDoctor] = useState(false);
@@ -278,7 +285,8 @@ export default function BookAppointmentScreen() {
           a.doctorId === doctorId &&
           a.date === selectedDate &&
           a.time === selectedTime &&
-          a.status !== 'cancelled'
+          a.status !== 'cancelled' &&
+          a.status !== 'rejected'
       );
 
       if (!isSlotValid || isBooked) {
@@ -294,7 +302,8 @@ export default function BookAppointmentScreen() {
         appointment.doctorId === doctorId &&
         appointment.date === selectedDate &&
         appointment.time === selectedTime &&
-        appointment.status !== 'cancelled'
+        appointment.status !== 'cancelled' &&
+        appointment.status !== 'rejected'
     );
   }, [appointments, doctorId, selectedDate, selectedTime]);
 
@@ -648,7 +657,8 @@ export default function BookAppointmentScreen() {
                     a.doctorId === doctorId &&
                     a.date === selectedDate &&
                     a.time === time &&
-                    a.status !== 'cancelled'
+                    a.status !== 'cancelled' &&
+                    a.status !== 'rejected'
                 );
 
                 return (
@@ -770,7 +780,7 @@ export default function BookAppointmentScreen() {
                   ]}
                   value={patientAge}
                   onChangeText={setPatientAge}
-                  placeholder="e.g. 28"
+                  placeholder="Enter patient age"
                   placeholderTextColor="#94A3B8"
                   keyboardType="numeric"
                   editable={!user?.age}
@@ -827,7 +837,7 @@ export default function BookAppointmentScreen() {
                   ]}
                   value={patientPhone}
                   onChangeText={setPatientPhone}
-                  placeholder="e.g. 01700000000"
+                  placeholder="Enter phone number"
                   placeholderTextColor="#94A3B8"
                   keyboardType="phone-pad"
                   editable={!user?.phone}
@@ -1014,7 +1024,7 @@ export default function BookAppointmentScreen() {
                 style={styles.input}
                 value={additionalNotes}
                 onChangeText={setAdditionalNotes}
-                placeholder="e.g. Penicillin allergy, taking insulin or BP pills..."
+                placeholder="Allergies, regular medications, or medical background..."
                 placeholderTextColor="#94A3B8"
               />
             </View>
@@ -1133,8 +1143,7 @@ export default function BookAppointmentScreen() {
           </Pressable>
 
           <Text style={styles.disclaimer}>
-            This appointment request uses the doctor's live availability
-            schedule and is saved locally on this device.
+            This appointment request uses the doctor's live availability schedule.
           </Text>
         </>
       )}

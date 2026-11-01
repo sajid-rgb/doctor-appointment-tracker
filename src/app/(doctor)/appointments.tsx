@@ -9,6 +9,7 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -42,6 +43,7 @@ export default function DoctorAppointmentsScreen() {
   );
   const doctors = useDoctorStore((state) => state.doctors);
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     fetchAppointments();
@@ -61,12 +63,31 @@ export default function DoctorAppointmentsScreen() {
 
   const myAppointments = useMemo(() => {
     const doctorIds = new Set([user?.id, currentDoctor?.id].filter(Boolean));
+    const query = search.trim().toLowerCase();
+
     return appointments
-      .filter((appointment) => doctorIds.has(appointment.doctorId))
+      .filter((appointment) => {
+        const matchesDoctor = doctorIds.has(appointment.doctorId);
+        if (!matchesDoctor) return false;
+
+        if (!query) return true;
+
+        return (
+          appointment.patientName?.toLowerCase().includes(query) ||
+          appointment.serialNumber?.toLowerCase().includes(query) ||
+          appointment.patientPhone?.toLowerCase().includes(query) ||
+          appointment.date?.toLowerCase().includes(query) ||
+          appointment.time?.toLowerCase().includes(query) ||
+          appointment.status?.toLowerCase().includes(query) ||
+          appointment.bloodGroup?.toLowerCase().includes(query) ||
+          appointment.condition?.toLowerCase().includes(query) ||
+          appointment.additionalNotes?.toLowerCase().includes(query)
+        );
+      })
       .sort((a, b) =>
         `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)
       );
-  }, [appointments, user?.id, currentDoctor?.id]);
+  }, [appointments, user?.id, currentDoctor?.id, search]);
 
   const notifyViaWhatsApp = (appointment: Appointment) => {
     sendWhatsAppNotification({
@@ -144,6 +165,23 @@ export default function DoctorAppointmentsScreen() {
           <Text style={styles.subtitle}>
             Review patient bookings and their medical intake records.
           </Text>
+
+          <View style={styles.searchBox}>
+            <Ionicons name="search-outline" size={20} color="#64748B" />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search patient, serial, phone, date..."
+              placeholderTextColor="#94A3B8"
+              style={styles.searchInput}
+              autoCapitalize="none"
+            />
+            {search.length > 0 && (
+              <Pressable onPress={() => setSearch('')} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color="#94A3B8" />
+              </Pressable>
+            )}
+          </View>
         </View>
       }
       ListEmptyComponent={
@@ -368,9 +406,32 @@ export default function DoctorAppointmentsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F8FAFC' },
   list: { padding: 20, paddingBottom: 32, flexGrow: 1 },
-  header: { marginBottom: 20 },
+  header: { marginBottom: 16 },
   title: { fontSize: 26, fontWeight: '800', color: '#0F172A' },
   subtitle: { color: '#64748B', marginTop: 6, lineHeight: 20 },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    height: 48,
+    marginTop: 14,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    paddingVertical: 0,
+  },
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,

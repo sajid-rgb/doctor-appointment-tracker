@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -147,8 +148,8 @@ export default function SignupScreen() {
         const createdUser = useAuthStore.getState().user;
 
         if (createdUser) {
-          try {
-            await registerDoctor({
+          await Promise.allSettled([
+            registerDoctor({
               id: createdUser.id,
               name: createdUser.name,
               email: createdUser.email,
@@ -158,14 +159,11 @@ export default function SignupScreen() {
               experience: Number(experience),
               fee: Number(fee),
               bio: bio.trim(),
-            });
-          } catch (docErr) {
-            console.warn('Doctor registration warning:', docErr);
-          }
-
-          if (doctorImage) {
-            useAuthStore.getState().updateUserProfile({ image: doctorImage });
-          }
+            }),
+            doctorImage
+              ? useAuthStore.getState().updateUserProfile({ image: doctorImage })
+              : Promise.resolve(),
+          ]);
         }
       }
 
@@ -272,7 +270,7 @@ export default function SignupScreen() {
           <TextInput
             value={email}
             onChangeText={setEmail}
-            placeholder="you@example.com"
+            placeholder="Enter your email"
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
@@ -399,7 +397,7 @@ export default function SignupScreen() {
               <TextInput
                 value={qualification}
                 onChangeText={setQualification}
-                placeholder="e.g. MBBS, FCPS"
+                placeholder="Enter qualifications"
                 style={styles.input}
                 editable={!loading}
               />
@@ -408,7 +406,7 @@ export default function SignupScreen() {
               <TextInput
                 value={experience}
                 onChangeText={setExperience}
-                placeholder="e.g. 5"
+                placeholder="Years in practice"
                 keyboardType="number-pad"
                 style={styles.input}
                 editable={!loading}
@@ -418,7 +416,7 @@ export default function SignupScreen() {
               <TextInput
                 value={fee}
                 onChangeText={setFee}
-                placeholder="e.g. 500"
+                placeholder="Fee amount"
                 keyboardType="number-pad"
                 style={styles.input}
                 editable={!loading}
@@ -450,11 +448,16 @@ export default function SignupScreen() {
             disabled={loading}
             style={[styles.submitButton, loading && styles.disabledButton]}
           >
-            <Text style={styles.submitText}>
-              {loading ? 'Creating account...' : 'Create Account'}
-            </Text>
-            {!loading && (
-              <Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
+            {loading ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.submitText}>Creating account...</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.submitText}>Create Account</Text>
+                <Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
+              </>
             )}
           </Pressable>
 

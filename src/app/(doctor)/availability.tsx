@@ -893,20 +893,6 @@ export default function DoctorAvailabilityScreen() {
             )}
           </View>
         ))}
-
-        {/* Information */}
-        <View style={styles.infoCard}>
-          <Ionicons
-            name="information-circle-outline"
-            size={21}
-            color="#2563EB"
-          />
-          <Text style={styles.infoText}>
-            These settings are saved locally on this device. A backend
-            connection is needed to share your availability with patients across
-            devices.
-          </Text>
-        </View>
       </ScrollView>
 
       {/* Save button */}

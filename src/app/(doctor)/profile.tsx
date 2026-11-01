@@ -562,7 +562,7 @@ export default function DoctorProfileScreen() {
                   style={styles.input}
                   value={name}
                   onChangeText={setName}
-                  placeholder="e.g. Dr. John Smith"
+                  placeholder="Enter doctor's full name"
                   placeholderTextColor="#94A3B8"
                 />
               </View>
@@ -585,7 +585,7 @@ export default function DoctorProfileScreen() {
                     style={styles.input}
                     value={specialty}
                     onChangeText={setSpecialty}
-                    placeholder="e.g. Cardiology"
+                    placeholder="Enter medical specialty"
                     placeholderTextColor="#94A3B8"
                   />
                 </View>
@@ -596,7 +596,7 @@ export default function DoctorProfileScreen() {
                     style={styles.input}
                     value={experience}
                     onChangeText={setExperience}
-                    placeholder="e.g. 8"
+                    placeholder="Years in practice"
                     placeholderTextColor="#94A3B8"
                     keyboardType="numeric"
                   />
@@ -610,7 +610,7 @@ export default function DoctorProfileScreen() {
                     style={styles.input}
                     value={fee}
                     onChangeText={setFee}
-                    placeholder="e.g. 1000"
+                    placeholder="Fee amount"
                     placeholderTextColor="#94A3B8"
                     keyboardType="numeric"
                   />
@@ -622,7 +622,7 @@ export default function DoctorProfileScreen() {
                     style={styles.input}
                     value={phone}
                     onChangeText={setPhone}
-                    placeholder="e.g. 01700000000"
+                    placeholder="Contact phone number"
                     placeholderTextColor="#94A3B8"
                     keyboardType="phone-pad"
                   />
@@ -635,7 +635,7 @@ export default function DoctorProfileScreen() {
                   style={styles.input}
                   value={qualification}
                   onChangeText={setQualification}
-                  placeholder="e.g. MBBS, FCPS, MD (Cardiology)"
+                  placeholder="Degrees and certifications"
                   placeholderTextColor="#94A3B8"
                 />
               </View>
@@ -646,7 +646,7 @@ export default function DoctorProfileScreen() {
                   style={styles.input}
                   value={hospital}
                   onChangeText={setHospital}
-                  placeholder="e.g. CarePoint Central Hospital"
+                  placeholder="Hospital or clinic name"
                   placeholderTextColor="#94A3B8"
                 />
               </View>
