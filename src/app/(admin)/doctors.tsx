@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -11,8 +14,21 @@ import { useDoctorStore } from '../../store/doctorStore';
 
 export default function AdminDoctorsScreen() {
   const doctors = useDoctorStore((state) => state.doctors);
+  const isLoading = useDoctorStore((state) => state.isLoading);
+  const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
   const updateStatus = useDoctorStore((state) => state.updateApprovalStatus);
   const deleteDoctor = useDoctorStore((state) => state.deleteDoctor);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchDoctors();
+  }, [fetchDoctors]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchDoctors();
+    setRefreshing(false);
+  };
 
   const pendingDoctors = doctors.filter(
     (doctor) => doctor.approvalStatus === 'pending'
@@ -64,8 +80,18 @@ export default function AdminDoctorsScreen() {
         data={pendingDoctors}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0F766E']} />
+        }
         ListEmptyComponent={
-          <Text style={styles.empty}>No pending doctor registrations.</Text>
+          isLoading && pendingDoctors.length === 0 ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color="#0F766E" />
+              <Text style={[styles.empty, { marginTop: 12 }]}>Loading doctor applications...</Text>
+            </View>
+          ) : (
+            <Text style={styles.empty}>No pending doctor registrations.</Text>
+          )
         }
         renderItem={({ item }) => (
           <View style={styles.card}>

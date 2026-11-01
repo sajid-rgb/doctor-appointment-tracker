@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Linking,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -31,10 +33,26 @@ function formatFileSize(bytes?: number): string {
 export default function DoctorAppointmentsScreen() {
   const user = useAuthStore((state) => state.user);
   const appointments = useAppointmentStore((state) => state.appointments);
+  const isLoading = useAppointmentStore((state) => state.isLoading);
+  const fetchAppointments = useAppointmentStore(
+    (state) => state.fetchAppointments
+  );
   const updateStatus = useAppointmentStore(
     (state) => state.updateAppointmentStatus
   );
   const doctors = useDoctorStore((state) => state.doctors);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchAppointments();
+    setRefreshing(false);
+  };
+
   const currentDoctor = doctors.find(
     (d) =>
       d.id === user?.id ||
@@ -117,6 +135,9 @@ export default function DoctorAppointmentsScreen() {
       contentContainerStyle={styles.list}
       data={myAppointments}
       keyExtractor={(item) => item.id}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0F766E']} />
+      }
       ListHeaderComponent={
         <View style={styles.header}>
           <Text style={styles.title}>Appointments</Text>
@@ -126,13 +147,20 @@ export default function DoctorAppointmentsScreen() {
         </View>
       }
       ListEmptyComponent={
-        <View style={styles.empty}>
-          <Ionicons name="calendar-outline" size={42} color="#94A3B8" />
-          <Text style={styles.emptyTitle}>No appointments yet</Text>
-          <Text style={styles.subtitle}>
-            Patient bookings for this doctor will appear here.
-          </Text>
-        </View>
+        isLoading && myAppointments.length === 0 ? (
+          <View style={[styles.empty, { paddingVertical: 40 }]}>
+            <ActivityIndicator size="large" color="#0F766E" />
+            <Text style={[styles.emptyTitle, { marginTop: 12 }]}>Loading appointments...</Text>
+          </View>
+        ) : (
+          <View style={styles.empty}>
+            <Ionicons name="calendar-outline" size={42} color="#94A3B8" />
+            <Text style={styles.emptyTitle}>No appointments yet</Text>
+            <Text style={styles.subtitle}>
+              Patient bookings for this doctor will appear here.
+            </Text>
+          </View>
+        )
       }
       renderItem={({ item }) => (
         <View style={styles.card}>

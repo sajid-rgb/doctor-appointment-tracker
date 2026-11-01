@@ -71,6 +71,8 @@ export default function BookAppointmentScreen() {
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const updateUserProfile = useAuthStore((state) => state.updateUserProfile);
   const doctors = useDoctorStore((state) => state.doctors);
+  const isLoading = useDoctorStore((state) => state.isLoading);
+  const fetchDoctorById = useDoctorStore((state) => state.fetchDoctorById);
   const updateDoctorAvailability = useDoctorStore(
     (state) => state.updateDoctorAvailability
   );
@@ -78,6 +80,16 @@ export default function BookAppointmentScreen() {
   const addAppointment = useAppointmentStore((state) => state.addAppointment);
 
   const doctor = doctors.find((item) => item.id === doctorId);
+  const [fetchingDoctor, setFetchingDoctor] = useState(false);
+
+  useEffect(() => {
+    if (!doctor && doctorId) {
+      setFetchingDoctor(true);
+      fetchDoctorById(doctorId).finally(() => {
+        setFetchingDoctor(false);
+      });
+    }
+  }, [doctor, doctorId, fetchDoctorById]);
 
   const [availability, setAvailability] = useState<AvailabilitySettings>(
     () => doctor?.availability ?? DEFAULT_AVAILABILITY
@@ -285,6 +297,21 @@ export default function BookAppointmentScreen() {
         appointment.status !== 'cancelled'
     );
   }, [appointments, doctorId, selectedDate, selectedTime]);
+
+  if ((!doctor && (isLoading || fetchingDoctor)) || loadingAvailability) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#F8FAFC',
+        }}
+      >
+        <ActivityIndicator size="large" color="#0F766E" />
+      </View>
+    );
+  }
 
   if (!doctor || doctor.approvalStatus !== 'approved') {
     return (

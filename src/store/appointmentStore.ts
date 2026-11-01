@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 import {
   deleteAppointmentFromFirestore,
@@ -8,6 +9,7 @@ import {
   updateAppointmentSerialInFirestore,
   updateAppointmentStatusInFirestore,
 } from '../services/appointmentService';
+import { safeAsyncStorage } from './authStore';
 
 export type AppointmentStatus =
   | 'pending'
@@ -113,19 +115,25 @@ type AppointmentState = {
   fetchAppointments: () => Promise<void>;
 };
 
-export const useAppointmentStore = create<AppointmentState>()((set, get) => ({
-  appointments: [],
-  isLoading: true,
+export const useAppointmentStore = create<AppointmentState>()(
+  persist(
+    (set, get) => ({
+      appointments: [],
+      isLoading: true,
 
-  fetchAppointments: async () => {
-    set({ isLoading: true });
-    try {
-      const appointments = await fetchAppointmentsFromFirestore();
-      set({ appointments, isLoading: false });
-    } catch {
-      set({ isLoading: false });
-    }
-  },
+      fetchAppointments: async () => {
+        set({ isLoading: true });
+        try {
+          const appointments = await fetchAppointmentsFromFirestore();
+          if (appointments.length > 0) {
+            set({ appointments, isLoading: false });
+          } else {
+            set({ isLoading: false });
+          }
+        } catch {
+          set({ isLoading: false });
+        }
+      },
 
   getNextSerialNumber: (doctorId: string, date: string) => {
     return generateUniqueSerialNumber(doctorId, date, get().appointments);
@@ -226,12 +234,31 @@ export const useAppointmentStore = create<AppointmentState>()((set, get) => ({
       console.warn('Failed to delete appointment from Firestore API:', err);
     }
   },
-}));
+}),
+    {
+      name: 'carepoint-appointments-cache',
+      storage: createJSONStorage(() => safeAsyncStorage),
+      partialize: (state) => ({
+        appointments: state.appointments,
+      }),
+      onRehydrateStorage: () => () => {
+        useAppointmentStore.setState({ isLoading: false });
+      },
+    }
+  )
+);
 
 // Real-time Cloud Firestore subscription for appointments
 let unsubscribeAppointments: (() => void) | null = null;
 
-export function initAppointmentsFirestoreListener(): () => void {
+export function initAppointmentsFirestoreListener(forceRestart = false): () => void {
+  if (forceRestart && unsubscribeAppointments) {
+    try {
+      unsubscribeAppointments();
+    } catch {}
+    unsubscribeAppointments = null;
+  }
+
   if (unsubscribeAppointments) return unsubscribeAppointments;
 
   unsubscribeAppointments = subscribeToAppointments(
@@ -243,6 +270,12 @@ export function initAppointmentsFirestoreListener(): () => void {
     },
     (error) => {
       console.warn('Firestore appointments subscription error:', error);
+      if (unsubscribeAppointments) {
+        try {
+          unsubscribeAppointments();
+        } catch {}
+        unsubscribeAppointments = null;
+      }
       useAppointmentStore.setState({ isLoading: false });
     }
   );

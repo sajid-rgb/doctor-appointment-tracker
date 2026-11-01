@@ -105,7 +105,7 @@ export function subscribeToAppointments(
 export async function fetchAppointmentsFromFirestore(): Promise<Appointment[]> {
   try {
     const appointmentsRef = collection(db, APPOINTMENTS_COLLECTION);
-    const snapshot = await withTimeout(getDocs(appointmentsRef), 3000, null as any);
+    const snapshot = await withTimeout(getDocs(appointmentsRef), 10000, null as any);
     if (!snapshot) return [];
 
     const appointments: Appointment[] = [];
@@ -131,7 +131,7 @@ export async function saveAppointmentToFirestore(
   try {
     const docRef = doc(db, APPOINTMENTS_COLLECTION, appointment.id);
     const sanitized = sanitizeForFirestore(appointment);
-    await withTimeout(setDoc(docRef, sanitized), 3000);
+    await withTimeout(setDoc(docRef, sanitized), 10000);
   } catch (error) {
     console.warn('Failed to save appointment to Firestore API:', error);
   }
@@ -150,7 +150,7 @@ export async function updateAppointmentStatusInFirestore(
       updateDoc(docRef, { status }).catch(() =>
         setDoc(docRef, { status }, { merge: true })
       ),
-      3000
+      10000
     );
   } catch (error) {
     console.warn('Failed to update appointment status in Firestore API:', error);
@@ -170,7 +170,7 @@ export async function updateAppointmentSerialInFirestore(
       updateDoc(docRef, { serialNumber }).catch(() =>
         setDoc(docRef, { serialNumber }, { merge: true })
       ),
-      3000
+      10000
     );
   } catch (error) {
     console.warn('Failed to update appointment serial in Firestore API:', error);
@@ -183,8 +183,8 @@ export async function updateAppointmentSerialInFirestore(
 export async function deleteAppointmentFromFirestore(id: string): Promise<void> {
   try {
     const docRef = doc(db, APPOINTMENTS_COLLECTION, id);
-    await withTimeout(deleteDoc(docRef), 3000);
+    await withTimeout(deleteDoc(docRef), 10000);
   } catch (error) {
-    console.warn('Failed to delete appointment from Firestore API:', error);
+    console.warn(`Failed to delete appointment from Firestore API:`, error);
   }
 }

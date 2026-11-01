@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -15,8 +17,22 @@ import { useDoctorStore } from '../../store/doctorStore';
 export default function DoctorsScreen() {
   const router = useRouter();
   const doctors = useDoctorStore((state) => state.doctors);
+  const isLoading = useDoctorStore((state) => state.isLoading);
+  const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
+
   const [search, setSearch] = useState('');
   const [specialty, setSpecialty] = useState('All');
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchDoctors();
+  }, [fetchDoctors]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchDoctors();
+    setRefreshing(false);
+  };
 
   const specialties = useMemo(
     () => [
@@ -29,7 +45,6 @@ export default function DoctorsScreen() {
     ],
     [doctors]
   );
-  console.log({ specialties });
 
   const filteredDoctors = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -93,14 +108,30 @@ export default function DoctorsScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#0F766E']}
+          />
+        }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="people-outline" size={40} color="#94A3B8" />
-            <Text style={styles.emptyTitle}>No doctors found</Text>
-            <Text style={styles.subtitle}>
-              Try another search or specialty.
-            </Text>
-          </View>
+          isLoading ? (
+            <View style={styles.empty}>
+              <ActivityIndicator size="large" color="#0F766E" />
+              <Text style={[styles.subtitle, { marginTop: 10 }]}>
+                Loading doctors...
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <Ionicons name="people-outline" size={40} color="#94A3B8" />
+              <Text style={styles.emptyTitle}>No doctors found</Text>
+              <Text style={styles.subtitle}>
+                Try another search or specialty.
+              </Text>
+            </View>
+          )
         }
         renderItem={({ item }) => (
           <View style={styles.card}>

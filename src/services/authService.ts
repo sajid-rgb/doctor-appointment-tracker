@@ -230,7 +230,7 @@ export async function signUpWithFirebase(
       role,
     };
 
-    // 3. Attempt to initialize user document in Cloud Firestore (with 2500ms timeout)
+    // 3. Attempt to initialize user document in Cloud Firestore (with 10000ms timeout)
     try {
       const newUserData: AuthUser & { createdAt: string } = {
         ...authUser,
@@ -238,7 +238,7 @@ export async function signUpWithFirebase(
       };
       const userDocRef = doc(db, USERS_COLLECTION, firebaseUser.uid);
       const sanitized = sanitizeForFirestore(newUserData);
-      await withTimeout(setDoc(userDocRef, sanitized), 2500);
+      await withTimeout(setDoc(userDocRef, sanitized), 10000);
     } catch (firestoreError: any) {
       console.warn(
         'Firestore user creation non-fatal warning (timeout or Datastore mode):',
@@ -281,7 +281,7 @@ export async function loginWithFirebase(
       const userDocRef = doc(db, USERS_COLLECTION, firebaseUser.uid);
       const userSnapshot = await withTimeout(
         getDoc(userDocRef),
-        2500,
+        10000,
         null as any
       );
 
@@ -348,7 +348,7 @@ export async function updateUserFirestoreProfile(
   try {
     const userDocRef = doc(db, USERS_COLLECTION, userId);
     const sanitized = sanitizeForFirestore(updates);
-    await withTimeout(setDoc(userDocRef, sanitized, { merge: true }), 3000);
+    await withTimeout(setDoc(userDocRef, sanitized, { merge: true }), 10000);
   } catch (error) {
     console.warn('Failed to update user profile in Firestore:', error);
   }
@@ -385,7 +385,7 @@ export function subscribeToUsers(
 export async function fetchUsersFromFirestore(): Promise<AuthUser[]> {
   try {
     const usersRef = collection(db, USERS_COLLECTION);
-    const snapshot = await withTimeout(getDocs(usersRef), 3000, null as any);
+    const snapshot = await withTimeout(getDocs(usersRef), 10000, null as any);
     if (!snapshot) return [];
 
     const users: AuthUser[] = [];
@@ -433,7 +433,7 @@ export async function fetchUserProfileById(
 ): Promise<AuthUser | null> {
   try {
     const userDocRef = doc(db, USERS_COLLECTION, userId);
-    const snap = await withTimeout(getDoc(userDocRef), 2500, null as any);
+    const snap = await withTimeout(getDoc(userDocRef), 10000, null as any);
     if (snap && typeof snap.exists === 'function' && snap.exists()) {
       return normalizeUserDoc(snap.id, snap.data());
     }
@@ -464,7 +464,7 @@ export async function getFirebaseToken(): Promise<string | null> {
 export async function deleteUserFromFirestore(userId: string): Promise<void> {
   try {
     const userDocRef = doc(db, USERS_COLLECTION, userId);
-    await withTimeout(deleteDoc(userDocRef), 3000);
+    await withTimeout(deleteDoc(userDocRef), 10000);
   } catch (error) {
     console.warn(`Failed to delete user ${userId} from Firestore:`, error);
   }

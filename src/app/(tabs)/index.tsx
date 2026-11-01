@@ -1,7 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useAppointmentStore } from '../../store/appointmentStore';
@@ -12,7 +19,23 @@ export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const appointments = useAppointmentStore((state) => state.appointments);
+  const fetchAppointments = useAppointmentStore(
+    (state) => state.fetchAppointments
+  );
   const doctors = useDoctorStore((state) => state.doctors);
+  const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchDoctors();
+    fetchAppointments();
+  }, [fetchDoctors, fetchAppointments]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchDoctors(), fetchAppointments()]);
+    setRefreshing(false);
+  };
 
   const myAppointments = useMemo(() => {
     if (user?.role === 'patient') {
@@ -50,6 +73,13 @@ export default function DashboardScreen() {
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={['#0F766E']}
+        />
+      }
     >
       <View style={styles.header}>
         <View>

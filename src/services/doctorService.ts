@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   setDoc,
@@ -118,7 +119,7 @@ export function subscribeToDoctors(
 export async function fetchDoctorsFromFirestore(): Promise<DoctorProfile[]> {
   try {
     const doctorsRef = collection(db, DOCTORS_COLLECTION);
-    const snapshot = await withTimeout(getDocs(doctorsRef), 3000, null as any);
+    const snapshot = await withTimeout(getDocs(doctorsRef), 10000, null as any);
     if (!snapshot) return [];
 
     const doctors: DoctorProfile[] = [];
@@ -129,6 +130,25 @@ export async function fetchDoctorsFromFirestore(): Promise<DoctorProfile[]> {
   } catch (error) {
     console.warn('Failed to fetch doctors from Firestore (timed out or offline):', error);
     return [];
+  }
+}
+
+/**
+ * Fetches a single doctor document by ID from Cloud Firestore API with timeout protection.
+ */
+export async function fetchDoctorByIdFromFirestore(
+  id: string
+): Promise<DoctorProfile | null> {
+  try {
+    const docRef = doc(db, DOCTORS_COLLECTION, id);
+    const snap = await withTimeout(getDoc(docRef), 10000, null as any);
+    if (snap && typeof snap.exists === 'function' && snap.exists()) {
+      return normalizeDoctorDoc(snap.id, snap.data());
+    }
+    return null;
+  } catch (error) {
+    console.warn(`Failed to fetch doctor ${id} from Firestore:`, error);
+    return null;
   }
 }
 
@@ -148,7 +168,7 @@ export async function saveDoctorToFirestore(
   try {
     const docRef = doc(db, DOCTORS_COLLECTION, doctor.id);
     const sanitized = sanitizeForFirestore(doctorRecord);
-    await withTimeout(setDoc(docRef, sanitized, { merge: true }), 3000);
+    await withTimeout(setDoc(docRef, sanitized, { merge: true }), 10000);
   } catch (error) {
     console.warn('Failed to save doctor to Firestore (timed out or offline):', error);
   }
@@ -166,7 +186,7 @@ export async function updateDoctorInFirestore(
   try {
     const docRef = doc(db, DOCTORS_COLLECTION, id);
     const sanitized = sanitizeForFirestore(updates);
-    await withTimeout(setDoc(docRef, sanitized, { merge: true }), 3000);
+    await withTimeout(setDoc(docRef, sanitized, { merge: true }), 10000);
   } catch (error) {
     console.warn('Failed to update doctor in Firestore:', error);
   }
@@ -185,7 +205,7 @@ export async function updateDoctorStatusInFirestore(
       updateDoc(docRef, { approvalStatus: status }).catch(() =>
         setDoc(docRef, { approvalStatus: status }, { merge: true })
       ),
-      3000
+      10000
     );
   } catch (error) {
     console.warn('Failed to update doctor approval status in Firestore:', error);
@@ -206,7 +226,7 @@ export async function updateDoctorAvailabilityInFirestore(
       updateDoc(docRef, { availability: sanitized }).catch(() =>
         setDoc(docRef, { availability: sanitized }, { merge: true })
       ),
-      3000
+      10000
     );
   } catch (error) {
     console.warn('Failed to update doctor availability in Firestore:', error);
@@ -219,7 +239,7 @@ export async function updateDoctorAvailabilityInFirestore(
 export async function deleteDoctorFromFirestore(id: string): Promise<void> {
   try {
     const docRef = doc(db, DOCTORS_COLLECTION, id);
-    await withTimeout(deleteDoc(docRef), 3000);
+    await withTimeout(deleteDoc(docRef), 10000);
   } catch (error) {
     console.warn(`Failed to delete doctor ${id} from Firestore:`, error);
   }

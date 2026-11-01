@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 import {
   type AvailabilitySettings,
@@ -8,6 +9,7 @@ import {
   type DoctorApprovalStatus,
   type DoctorProfile,
   deleteDoctorFromFirestore,
+  fetchDoctorByIdFromFirestore,
   fetchDoctorsFromFirestore,
   type NewDoctorProfile,
   saveDoctorToFirestore,
@@ -16,6 +18,7 @@ import {
   updateDoctorInFirestore,
   updateDoctorStatusInFirestore,
 } from '../services/doctorService';
+import { safeAsyncStorage } from './authStore';
 
 export type { DoctorApprovalStatus, DoctorProfile };
 
@@ -51,55 +54,70 @@ type DoctorState = {
   ) => Promise<void>;
   deleteDoctor: (id: string) => Promise<void>;
   fetchDoctors: () => Promise<void>;
+  fetchDoctorById: (id: string) => Promise<DoctorProfile | null>;
 };
 
-export const useDoctorStore = create<DoctorState>()((set, get) => ({
-  doctors: [],
-  isLoading: true,
-  error: null,
+export const useDoctorStore = create<DoctorState>()(
+  persist(
+    (set, get) => ({
+      doctors: [],
+      isLoading: true,
+      error: null,
 
-  fetchDoctors: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      const doctors = await fetchDoctorsFromFirestore();
-      set({ doctors, isLoading: false });
-    } catch (error: any) {
-      set({ isLoading: false, error: error?.message || 'Failed to load doctors' });
-    }
-  },
+      fetchDoctors: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const doctors = await fetchDoctorsFromFirestore();
+          if (doctors.length > 0) {
+            set({ doctors, isLoading: false });
+          } else {
+            set({ isLoading: false });
+          }
+        } catch (error: any) {
+          set({ isLoading: false, error: error?.message || 'Failed to load doctors' });
+        }
+      },
 
-  registerDoctor: async (doctor) => {
-    const exists = get().doctors.some(
-      (item) =>
-        item.id === doctor.id ||
-        item.email.toLowerCase() === doctor.email.toLowerCase()
-    );
+      fetchDoctorById: async (id: string) => {
+        try {
+          const doc = await fetchDoctorByIdFromFirestore(id);
+          if (doc) {
+            set((state) => ({
+              doctors: state.doctors.some((d) => d.id === doc.id)
+                ? state.doctors.map((d) => (d.id === doc.id ? doc : d))
+                : [...state.doctors, doc],
+            }));
+            return doc;
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      },
 
-    if (exists) return;
+      registerDoctor: async (doctor) => {
+        // Optimistic local update
+        const optimisticRecord: DoctorProfile = {
+          ...doctor,
+          approvalStatus: 'pending',
+          availability: doctor.availability ?? DEFAULT_AVAILABILITY,
+          createdAt: new Date().toISOString(),
+        };
 
-    // Optimistic local update
-    const optimisticRecord: DoctorProfile = {
-      ...doctor,
-      approvalStatus: 'pending',
-      availability: doctor.availability ?? DEFAULT_AVAILABILITY,
-      createdAt: new Date().toISOString(),
-    };
+        set((state) => ({
+          doctors: state.doctors.some((item) => item.id === doctor.id)
+            ? state.doctors.map((item) =>
+                item.id === doctor.id ? optimisticRecord : item
+              )
+            : [...state.doctors, optimisticRecord],
+        }));
 
-    set((state) => ({
-      doctors: [...state.doctors, optimisticRecord],
-    }));
-
-    try {
-      await saveDoctorToFirestore(doctor);
-    } catch (err: any) {
-      console.error('Failed to register doctor in Firestore API:', err);
-      // Rollback optimistic update if Firestore write failed
-      set((state) => ({
-        doctors: state.doctors.filter((d) => d.id !== doctor.id),
-      }));
-      throw err;
-    }
-  },
+        try {
+          await saveDoctorToFirestore(doctor);
+        } catch (err: any) {
+          console.warn('Failed to register doctor in Firestore API:', err);
+        }
+      },
 
   updateDoctorProfile: async (id, updates) => {
     const current = get().doctors.find(
@@ -203,12 +221,31 @@ export const useDoctorStore = create<DoctorState>()((set, get) => ({
       console.warn('Failed to delete doctor from Firestore API:', err);
     }
   },
-}));
+}),
+    {
+      name: 'carepoint-doctors-cache',
+      storage: createJSONStorage(() => safeAsyncStorage),
+      partialize: (state) => ({
+        doctors: state.doctors,
+      }),
+      onRehydrateStorage: () => () => {
+        useDoctorStore.setState({ isLoading: false });
+      },
+    }
+  )
+);
 
 // Real-time Cloud Firestore subscription: Keeps doctors synchronized across the entire app
 let unsubscribeDoctors: (() => void) | null = null;
 
-export function initDoctorFirestoreListener(): () => void {
+export function initDoctorFirestoreListener(forceRestart = false): () => void {
+  if (forceRestart && unsubscribeDoctors) {
+    try {
+      unsubscribeDoctors();
+    } catch {}
+    unsubscribeDoctors = null;
+  }
+
   if (unsubscribeDoctors) return unsubscribeDoctors;
 
   unsubscribeDoctors = subscribeToDoctors(
@@ -251,6 +288,12 @@ export function initDoctorFirestoreListener(): () => void {
     },
     (error) => {
       console.warn('Firestore doctors subscription error:', error);
+      if (unsubscribeDoctors) {
+        try {
+          unsubscribeDoctors();
+        } catch {}
+        unsubscribeDoctors = null;
+      }
       useDoctorStore.setState({
         isLoading: false,
         error: error.message,

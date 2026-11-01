@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Linking,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -172,11 +174,29 @@ function StatusBadge({ status }: { status: AppointmentStatus }) {
 
 export default function PatientAppointmentsScreen() {
   const appointments = useAppointmentStore((state) => state.appointments);
+  const isLoading = useAppointmentStore((state) => state.isLoading);
+  const fetchAppointments = useAppointmentStore(
+    (state) => state.fetchAppointments
+  );
   const doctors = useDoctorStore((state) => state.doctors);
+  const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
 
   const cancelAppointment = useAppointmentStore(
     (state) => state.cancelAppointment
   );
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchAppointments();
+    fetchDoctors();
+  }, [fetchAppointments, fetchDoctors]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchAppointments(), fetchDoctors()]);
+    setRefreshing(false);
+  };
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
@@ -598,16 +618,26 @@ export default function PatientAppointmentsScreen() {
         renderItem={renderAppointment}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0F766E']} />
+        }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="calendar-outline" size={32} color="#0F766E" />
+          isLoading && filteredAppointments.length === 0 ? (
+            <View style={[styles.emptyState, { paddingVertical: 40 }]}>
+              <ActivityIndicator size="large" color="#0F766E" />
+              <Text style={[styles.emptyTitle, { marginTop: 12 }]}>Loading visits...</Text>
             </View>
-            <Text style={styles.emptyTitle}>No appointments found</Text>
-            <Text style={styles.emptyDescription}>
-              Try changing your filters or book an appointment with a doctor.
-            </Text>
-          </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="calendar-outline" size={32} color="#0F766E" />
+              </View>
+              <Text style={styles.emptyTitle}>No appointments found</Text>
+              <Text style={styles.emptyDescription}>
+                Try changing your filters or book an appointment with a doctor.
+              </Text>
+            </View>
+          )
         }
       />
     </View>

@@ -1,6 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { NotificationBell } from '../../components/NotificationBell';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
@@ -13,8 +21,27 @@ export default function AdminDashboard() {
   const logout = useAuthStore((state) => state.logout);
 
   const users = useAuthStore((state) => state.users);
+  const fetchUsers = useAuthStore((state) => state.fetchUsers);
   const doctors = useDoctorStore((state) => state.doctors);
+  const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
   const appointments = useAppointmentStore((state) => state.appointments);
+  const fetchAppointments = useAppointmentStore(
+    (state) => state.fetchAppointments
+  );
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchDoctors();
+    fetchUsers();
+    fetchAppointments();
+  }, [fetchDoctors, fetchUsers, fetchAppointments]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchDoctors(), fetchUsers(), fetchAppointments()]);
+    setRefreshing(false);
+  };
 
   const patientsCount = users.filter((item) => item.role === 'patient').length;
 
@@ -60,7 +87,16 @@ export default function AdminDashboard() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#0F766E']}
+          />
+        }
+      >
         <View style={styles.header}>
           <View>
             <Text style={styles.brand}>CarePoint</Text>

@@ -3,9 +3,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,9 +16,10 @@ import {
   View,
 } from 'react-native';
 import { DoctorAvatar } from '../../components/DoctorAvatar';
+import { DEFAULT_AVAILABILITY } from '../../constants/availability';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
-import { useDoctorStore } from '../../store/doctorStore';
+import { type DoctorProfile, useDoctorStore } from '../../store/doctorStore';
 
 export default function DoctorProfileScreen() {
   const router = useRouter();
@@ -24,12 +27,18 @@ export default function DoctorProfileScreen() {
   const updateUserProfile = useAuthStore((state) => state.updateUserProfile);
   const logout = useAuthStore((state) => state.logout);
   const doctors = useDoctorStore((state) => state.doctors);
+  const isLoading = useDoctorStore((state) => state.isLoading);
+  const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
+  const fetchDoctorById = useDoctorStore((state) => state.fetchDoctorById);
+  const registerDoctor = useDoctorStore((state) => state.registerDoctor);
   const updateDoctorProfile = useDoctorStore(
     (state) => state.updateDoctorProfile
   );
   const appointments = useAppointmentStore((state) => state.appointments);
 
-  const doctor = useMemo(
+  const [refreshing, setRefreshing] = useState(false);
+
+  const matchedDoctor = useMemo(
     () =>
       doctors.find(
         (item) =>
@@ -39,6 +48,60 @@ export default function DoctorProfileScreen() {
       ),
     [doctors, user?.id, user?.email]
   );
+
+  const fallbackDoctor: DoctorProfile | null = useMemo(() => {
+    if (user?.role === 'doctor' && user.id) {
+      return {
+        id: user.id,
+        name: user.name || 'Doctor',
+        email: user.email,
+        phone: user.phone,
+        image: user.image,
+        specialty: 'General Physician',
+        qualification: 'MBBS',
+        experience: 1,
+        fee: 500,
+        bio: '',
+        approvalStatus: 'approved',
+        createdAt: new Date().toISOString(),
+        availability: DEFAULT_AVAILABILITY,
+      };
+    }
+    return null;
+  }, [user]);
+
+  const doctor: DoctorProfile = (matchedDoctor || fallbackDoctor) as DoctorProfile;
+
+  // Auto-fetch if doctor is not in store
+  useEffect(() => {
+    let isMounted = true;
+    if (!matchedDoctor && user?.id) {
+      fetchDoctorById(user.id).then((found) => {
+        if (!found && isMounted) {
+          fetchDoctors();
+        }
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [matchedDoctor, user?.id, fetchDoctorById, fetchDoctors]);
+
+  // If no doctor doc in Firestore, seed fallback doctor
+  useEffect(() => {
+    if (!matchedDoctor && fallbackDoctor && !isLoading && user?.role === 'doctor') {
+      registerDoctor(fallbackDoctor).catch(() => {});
+    }
+  }, [matchedDoctor, fallbackDoctor, isLoading, user?.role, registerDoctor]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    if (user?.id) {
+      await fetchDoctorById(user.id);
+    }
+    await fetchDoctors();
+    setRefreshing(false);
+  };
 
   const [isEditing, setIsEditing] = useState(false);
 
@@ -207,7 +270,16 @@ export default function DoctorProfileScreen() {
     );
   }
 
-  if (!doctor) {
+  if (isLoading && !doctor?.id) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#0F766E" />
+        <Text style={styles.centerText}>Loading doctor profile...</Text>
+      </View>
+    );
+  }
+
+  if (!doctor || !doctor.id) {
     return (
       <View style={styles.center}>
         <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
@@ -321,6 +393,13 @@ export default function DoctorProfileScreen() {
         style={styles.screen}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#0F766E']}
+          />
+        }
       >
         {/* Header Card */}
         <View style={styles.headerCard}>

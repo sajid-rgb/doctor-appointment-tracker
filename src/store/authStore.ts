@@ -1,5 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { onAuthStateChanged } from 'firebase/auth';
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+} from 'firebase/auth';
 import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
@@ -16,6 +20,9 @@ import {
   subscribeToUsers,
   updateUserFirestoreProfile,
 } from '../services/authService';
+import { initAppointmentsFirestoreListener, useAppointmentStore } from './appointmentStore';
+import { initDoctorFirestoreListener, useDoctorStore } from './doctorStore';
+import { initNotificationFirestoreListener, useNotificationStore } from './notificationStore';
 
 export const AUTH_TOKEN_STORAGE_KEY = 'carepoint_auth_token';
 const ADMIN_SESSION_TOKEN = 'carepoint-admin-session-token';
@@ -192,6 +199,7 @@ export const useAuthStore = create<AuthState>()(
 
         safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
         attachCurrentUserListener(newUser.id);
+        triggerDataSync();
         return null;
       },
 
@@ -200,10 +208,22 @@ export const useAuthStore = create<AuthState>()(
 
         // Demo admin login
         if (normalizedEmail === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+          try {
+            await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+          } catch (adminErr: any) {
+            console.warn('Admin Firebase Auth sign in failed, attempting user creation:', adminErr);
+            try {
+              await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+            } catch (createErr) {
+              console.warn('Admin Firebase Auth creation failed:', createErr);
+            }
+          }
+
           const { password: _password, ...safeAdmin } = demoAdmin;
           const authToken = ADMIN_SESSION_TOKEN;
           set({ user: safeAdmin, token: authToken });
           safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
+          triggerDataSync();
           return null;
         }
 
@@ -224,6 +244,7 @@ export const useAuthStore = create<AuthState>()(
             const authToken = safeUser.id;
             set({ user: safeUser, token: authToken });
             safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
+            triggerDataSync();
             return null;
           }
 
@@ -246,6 +267,7 @@ export const useAuthStore = create<AuthState>()(
 
         safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken).catch(() => {});
         attachCurrentUserListener(loggedInUser.id);
+        triggerDataSync();
         return null;
       },
 
@@ -314,6 +336,8 @@ export const useAuthStore = create<AuthState>()(
         if (persistedToken === ADMIN_SESSION_TOKEN) {
           const { password: _password, ...safeAdmin } = demoAdmin;
           useAuthStore.setState({ user: safeAdmin, token: persistedToken, hasHydrated: true });
+          signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD).catch(() => {});
+          triggerDataSync();
           return;
         }
 
@@ -338,6 +362,7 @@ export const useAuthStore = create<AuthState>()(
 
             safeAsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token).catch(() => {});
             attachCurrentUserListener(resolvedUser.id);
+            triggerDataSync();
           } else {
             // No active Firebase session
             const currentToken = useAuthStore.getState().token;
@@ -361,10 +386,35 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
+/**
+ * Triggers re-synchronization across all stores once user or admin is authenticated
+ */
+export function triggerDataSync() {
+  try {
+    initDoctorFirestoreListener(true);
+    initUsersFirestoreListener(true);
+    initAppointmentsFirestoreListener(true);
+    initNotificationFirestoreListener(true);
+    useDoctorStore.getState().fetchDoctors();
+    useAuthStore.getState().fetchUsers();
+    useAppointmentStore.getState().fetchAppointments();
+    useNotificationStore.getState().fetchNotifications();
+  } catch (err) {
+    console.warn('triggerDataSync warning:', err);
+  }
+}
+
 // Real-time Cloud Firestore subscription for all users and patients
 let unsubscribeUsers: (() => void) | null = null;
 
-export function initUsersFirestoreListener(): () => void {
+export function initUsersFirestoreListener(forceRestart = false): () => void {
+  if (forceRestart && unsubscribeUsers) {
+    try {
+      unsubscribeUsers();
+    } catch {}
+    unsubscribeUsers = null;
+  }
+
   if (unsubscribeUsers) return unsubscribeUsers;
 
   unsubscribeUsers = subscribeToUsers(
@@ -381,6 +431,12 @@ export function initUsersFirestoreListener(): () => void {
     },
     (error) => {
       console.warn('Firestore users subscription error:', error);
+      if (unsubscribeUsers) {
+        try {
+          unsubscribeUsers();
+        } catch {}
+        unsubscribeUsers = null;
+      }
       useAuthStore.setState({ isLoadingUsers: false });
     }
   );

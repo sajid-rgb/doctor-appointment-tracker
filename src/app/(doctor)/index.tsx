@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -205,11 +206,35 @@ export default function DoctorDashboard() {
     [appointments, user?.id]
   );
 
+  const [refreshing, setRefreshing] = useState(false);
+  const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
+  const fetchAppointments = useAppointmentStore(
+    (state) => state.fetchAppointments
+  );
+
+  useEffect(() => {
+    fetchDoctors();
+    fetchAppointments();
+  }, [fetchDoctors, fetchAppointments]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchDoctors(), fetchAppointments()]);
+    setRefreshing(false);
+  };
+
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[TEAL]}
+        />
+      }
     >
       {/* Header */}
       <View style={styles.header}>

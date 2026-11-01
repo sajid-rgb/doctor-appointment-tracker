@@ -146,7 +146,14 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
 // Real-time Cloud Firestore subscription for notifications
 let unsubscribeNotifications: (() => void) | null = null;
 
-export function initNotificationFirestoreListener(): () => void {
+export function initNotificationFirestoreListener(forceRestart = false): () => void {
+  if (forceRestart && unsubscribeNotifications) {
+    try {
+      unsubscribeNotifications();
+    } catch {}
+    unsubscribeNotifications = null;
+  }
+
   if (unsubscribeNotifications) return unsubscribeNotifications;
 
   unsubscribeNotifications = subscribeToNotifications(
@@ -158,6 +165,12 @@ export function initNotificationFirestoreListener(): () => void {
     },
     (error) => {
       console.warn('Firestore notifications subscription error:', error);
+      if (unsubscribeNotifications) {
+        try {
+          unsubscribeNotifications();
+        } catch {}
+        unsubscribeNotifications = null;
+      }
       useNotificationStore.setState({ isLoading: false });
     }
   );

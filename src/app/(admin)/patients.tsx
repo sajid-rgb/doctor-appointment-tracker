@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -15,8 +17,21 @@ import { useAuthStore } from '../../store/authStore';
 export default function PatientManagementScreen() {
   const router = useRouter();
   const users = useAuthStore((state) => state.users);
+  const isLoadingUsers = useAuthStore((state) => state.isLoadingUsers);
+  const fetchUsers = useAuthStore((state) => state.fetchUsers);
   const deleteUser = useAuthStore((state) => state.deleteUser);
   const [search, setSearch] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchUsers();
+    setRefreshing(false);
+  };
 
   const patients = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -98,6 +113,9 @@ export default function PatientManagementScreen() {
         data={patients}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0F766E']} />
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View style={styles.avatar}>
@@ -124,13 +142,20 @@ export default function PatientManagementScreen() {
           </View>
         )}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="people-outline" size={44} color="#94A3B8" />
-            <Text style={styles.emptyTitle}>No patients found</Text>
-            <Text style={styles.emptySubtitle}>
-              Registered patient accounts will appear here.
-            </Text>
-          </View>
+          isLoadingUsers && patients.length === 0 ? (
+            <View style={[styles.empty, { paddingVertical: 40 }]}>
+              <ActivityIndicator size="large" color="#0F766E" />
+              <Text style={[styles.emptyTitle, { marginTop: 12 }]}>Loading patients...</Text>
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <Ionicons name="people-outline" size={44} color="#94A3B8" />
+              <Text style={styles.emptyTitle}>No patients found</Text>
+              <Text style={styles.emptySubtitle}>
+                Registered patient accounts will appear here.
+              </Text>
+            </View>
+          )
         }
       />
     </View>

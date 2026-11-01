@@ -34,11 +34,22 @@ const TEAL = '#0F766E';
 export default function DoctorAvailabilityScreen() {
   const user = useAuthStore((state) => state.user);
   const doctors = useDoctorStore((state) => state.doctors);
+  const fetchDoctorById = useDoctorStore((state) => state.fetchDoctorById);
   const updateDoctorAvailability = useDoctorStore(
     (state) => state.updateDoctorAvailability
   );
 
-  const currentDoctor = doctors.find((d) => d.id === user?.id);
+  const currentDoctor = doctors.find(
+    (d) =>
+      d.id === user?.id ||
+      (user?.email && d.email?.toLowerCase() === user.email.toLowerCase())
+  );
+
+  useEffect(() => {
+    if (!currentDoctor && user?.id) {
+      fetchDoctorById(user.id);
+    }
+  }, [currentDoctor, user?.id, fetchDoctorById]);
 
   const [settings, setSettings] = useState<AvailabilitySettings>(
     () => currentDoctor?.availability ?? DEFAULT_AVAILABILITY

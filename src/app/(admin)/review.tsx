@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -17,12 +19,25 @@ type FilterType = 'all' | DoctorApprovalStatus;
 export default function DoctorReviewScreen() {
   const router = useRouter();
   const doctors = useDoctorStore((state) => state.doctors);
+  const isLoading = useDoctorStore((state) => state.isLoading);
+  const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
   const updateApprovalStatus = useDoctorStore(
     (state) => state.updateApprovalStatus
   );
   const deleteDoctor = useDoctorStore((state) => state.deleteDoctor);
 
   const [filter, setFilter] = useState<FilterType>('pending');
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchDoctors();
+  }, [fetchDoctors]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchDoctors();
+    setRefreshing(false);
+  };
 
   const filteredDoctors = useMemo(
     () =>
@@ -200,14 +215,24 @@ export default function DoctorReviewScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderDoctor}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0F766E']} />
+        }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="people-outline" size={44} color="#94A3B8" />
-            <Text style={styles.emptyTitle}>No doctors found</Text>
-            <Text style={styles.emptySubtitle}>
-              There are no doctors in this category yet.
-            </Text>
-          </View>
+          isLoading && filteredDoctors.length === 0 ? (
+            <View style={[styles.empty, { paddingVertical: 40 }]}>
+              <ActivityIndicator size="large" color="#0F766E" />
+              <Text style={[styles.emptyTitle, { marginTop: 12 }]}>Loading doctors...</Text>
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <Ionicons name="people-outline" size={44} color="#94A3B8" />
+              <Text style={styles.emptyTitle}>No doctors found</Text>
+              <Text style={styles.emptySubtitle}>
+                There are no doctors in this category yet.
+              </Text>
+            </View>
+          )
         }
       />
     </View>
