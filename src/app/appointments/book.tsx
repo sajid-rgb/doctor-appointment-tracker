@@ -1223,7 +1223,9 @@ export default function BookAppointmentScreen() {
             <TouchableOpacity
               activeOpacity={0.85}
               style={styles.membershipPromoCard}
-              onPress={() => router.push('/subscribe')}
+              onPress={() =>
+                router.push({ pathname: '/subscribe', params: { role: 'patient' } })
+              }
             >
               <View style={styles.promoIconBox}>
                 <Ionicons name="sparkles" size={18} color="#D97706" />

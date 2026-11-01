@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   Alert,
@@ -21,6 +21,7 @@ import {
 
 export default function SubscribeScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ role?: string }>();
   const user = useAuthStore((state) => state.user);
   const subscription = useSubscriptionStore((state) => state.subscription);
   const billingCycle = useSubscriptionStore((state) => state.billingCycle);
@@ -28,8 +29,17 @@ export default function SubscribeScreen() {
   const subscribe = useSubscriptionStore((state) => state.subscribe);
   const cancelSubscription = useSubscriptionStore((state) => state.cancelSubscription);
 
-  const defaultRole = user?.role === 'doctor' ? 'doctor' : 'patient';
-  const [roleTab, setRoleTab] = useState<'patient' | 'doctor'>(defaultRole);
+  // Strict role separation:
+  // - Doctors ONLY see Doctor Practice Plans
+  // - Patients ONLY see Patient Care Plans
+  // - Admins can inspect and toggle between both
+  const userRole = user?.role;
+  const isDoctor = userRole === 'doctor' || params.role === 'doctor';
+  const isAdmin = userRole === 'admin';
+  const initialRole: 'patient' | 'doctor' = isDoctor ? 'doctor' : 'patient';
+
+  const [adminRoleTab, setAdminRoleTab] = useState<'patient' | 'doctor'>(initialRole);
+  const effectiveRole: 'patient' | 'doctor' = isAdmin ? adminRoleTab : initialRole;
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
 
@@ -37,11 +47,14 @@ export default function SubscribeScreen() {
     subscription &&
       subscription.status === 'active' &&
       subscription.tier !== 'free' &&
-      subscription.tier !== 'doctor_starter'
+      subscription.tier !== 'doctor_starter' &&
+      (effectiveRole === 'doctor'
+        ? subscription.tier === 'doctor_pro' || subscription.tier === 'doctor_elite'
+        : subscription.tier === 'plus' || subscription.tier === 'vip')
   );
 
   const currentPool =
-    roleTab === 'doctor' ? DOCTOR_SUBSCRIPTION_PLANS : PATIENT_SUBSCRIPTION_PLANS;
+    effectiveRole === 'doctor' ? DOCTOR_SUBSCRIPTION_PLANS : PATIENT_SUBSCRIPTION_PLANS;
 
   const plans = currentPool.filter((p) => {
     if (p.tier === 'free' || p.tier === 'doctor_starter') return true;
@@ -147,12 +160,12 @@ export default function SubscribeScreen() {
         </Pressable>
         <View style={styles.headerTitleBox}>
           <Text style={styles.title}>
-            {roleTab === 'doctor'
+            {effectiveRole === 'doctor'
               ? 'Doctor Practice Plans'
               : 'CarePoint Memberships'}
           </Text>
           <Text style={styles.subtitle}>
-            {roleTab === 'doctor'
+            {effectiveRole === 'doctor'
               ? 'Verified badges, unlimited bookings & top search ranking'
               : 'Unlock discounts & priority healthcare'}
           </Text>
@@ -160,46 +173,54 @@ export default function SubscribeScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {/* Role Segmented Switcher */}
-        <View style={styles.roleTabContainer}>
-          <Pressable
-            style={[styles.roleTab, roleTab === 'patient' && styles.activeRoleTab]}
-            onPress={() => setRoleTab('patient')}
-          >
-            <Ionicons
-              name="person"
-              size={15}
-              color={roleTab === 'patient' ? '#0F766E' : '#64748B'}
-            />
-            <Text
+        {/* Role Segmented Switcher — only shown for admin accounts */}
+        {isAdmin && (
+          <View style={styles.roleTabContainer}>
+            <Pressable
               style={[
-                styles.roleTabText,
-                roleTab === 'patient' && styles.activeRoleTabText,
+                styles.roleTab,
+                effectiveRole === 'patient' && styles.activeRoleTab,
               ]}
+              onPress={() => setAdminRoleTab('patient')}
             >
-              Patient Care Plans
-            </Text>
-          </Pressable>
+              <Ionicons
+                name="person"
+                size={15}
+                color={effectiveRole === 'patient' ? '#0F766E' : '#64748B'}
+              />
+              <Text
+                style={[
+                  styles.roleTabText,
+                  effectiveRole === 'patient' && styles.activeRoleTabText,
+                ]}
+              >
+                Patient Care Plans
+              </Text>
+            </Pressable>
 
-          <Pressable
-            style={[styles.roleTab, roleTab === 'doctor' && styles.activeRoleTab]}
-            onPress={() => setRoleTab('doctor')}
-          >
-            <Ionicons
-              name="medical"
-              size={15}
-              color={roleTab === 'doctor' ? '#0F766E' : '#64748B'}
-            />
-            <Text
+            <Pressable
               style={[
-                styles.roleTabText,
-                roleTab === 'doctor' && styles.activeRoleTabText,
+                styles.roleTab,
+                effectiveRole === 'doctor' && styles.activeRoleTab,
               ]}
+              onPress={() => setAdminRoleTab('doctor')}
             >
-              Doctor Practice Plans
-            </Text>
-          </Pressable>
-        </View>
+              <Ionicons
+                name="medical"
+                size={15}
+                color={effectiveRole === 'doctor' ? '#0F766E' : '#64748B'}
+              />
+              <Text
+                style={[
+                  styles.roleTabText,
+                  effectiveRole === 'doctor' && styles.activeRoleTabText,
+                ]}
+              >
+                Doctor Practice Plans
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* Active Subscription Banner if subscribed */}
         {isSubscribed && subscription && (

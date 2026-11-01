@@ -208,7 +208,9 @@ export default function PatientProfileScreen() {
               <TouchableOpacity
                 activeOpacity={0.8}
                 style={styles.managePlanBtn}
-                onPress={() => router.push('/subscribe')}
+                onPress={() =>
+                  router.push({ pathname: '/subscribe', params: { role: 'patient' } })
+                }
               >
                 <Text style={styles.managePlanBtnText}>Manage Plan</Text>
                 <Ionicons name="chevron-forward" size={14} color="#0F766E" />
@@ -219,7 +221,9 @@ export default function PatientProfileScreen() {
           <TouchableOpacity
             activeOpacity={0.9}
             style={styles.membershipPromoBanner}
-            onPress={() => router.push('/subscribe')}
+            onPress={() =>
+              router.push({ pathname: '/subscribe', params: { role: 'patient' } })
+            }
           >
             <View style={styles.promoBannerLeft}>
               <View style={styles.promoBadgeSmall}>

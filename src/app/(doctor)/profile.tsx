@@ -514,7 +514,9 @@ export default function DoctorProfileScreen() {
               <TouchableOpacity
                 activeOpacity={0.8}
                 style={styles.managePracticeBtn}
-                onPress={() => router.push('/subscribe')}
+                onPress={() =>
+                  router.push({ pathname: '/subscribe', params: { role: 'doctor' } })
+                }
               >
                 <Text style={styles.managePracticeBtnText}>Manage Plan</Text>
                 <Ionicons name="chevron-forward" size={14} color="#0F766E" />
@@ -525,7 +527,9 @@ export default function DoctorProfileScreen() {
           <TouchableOpacity
             activeOpacity={0.9}
             style={styles.upgradePracticeBanner}
-            onPress={() => router.push('/subscribe')}
+            onPress={() =>
+              router.push({ pathname: '/subscribe', params: { role: 'doctor' } })
+            }
           >
             <View style={{ flex: 1 }}>
               <View style={styles.upgradeBadgeSmall}>

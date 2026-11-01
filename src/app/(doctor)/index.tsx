@@ -281,7 +281,9 @@ export default function DoctorDashboard() {
       <TouchableOpacity
         style={styles.doctorSubBanner}
         activeOpacity={0.85}
-        onPress={() => router.push('/subscribe')}
+        onPress={() =>
+          router.push({ pathname: '/subscribe', params: { role: 'doctor' } })
+        }
       >
         <View style={styles.doctorSubIconBox}>
           <Ionicons
