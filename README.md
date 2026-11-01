@@ -1,35 +1,83 @@
-# CarePoint — Healthcare & Doctor Appointment Management System
+# CarePoint — Digital Doctor Appointment Management System
+**React Native | Expo | TypeScript | Firebase | Stripe**
 
-> **A modern React Native & Expo mobile application connecting patients, doctors, and healthcare administrators with real-time scheduling, digital medical intake, and WhatsApp notifications.**
+> **Developed a cross-platform digital doctor appointment management application using React Native and Expo, with Firebase Cloud Firestore for data management. The application features three role-based panels (Admin, Doctor, and Patient), appointment scheduling, doctor availability management, payment simulation, attendance tracking, and automated notifications.**
 
 ---
 
-## 🌟 Key Features
+### Project Objective
+To build a centralized digital healthcare platform that simplifies doctor-patient communication, appointment scheduling, availability management, and attendance tracking while providing payment simulation, subscription functionality, and automated appointment notifications.
 
-- **Multi-Role Access Control:** Custom tailored dashboards for **Patients**, **Doctors**, and **Administrators**.
-- **Real-Time Doctor Approval:** Administrator review system to verify, approve, or reject medical practitioners before they appear publicly.
-- **Dynamic Weekly Availability:** Doctors can customize working days, consultation start/end times, and slot intervals (e.g. 15m, 20m, 30m).
-- **Universal Multi-Field Search:** Real-time search across doctors, patient lists, and appointment queues by name, specialty, serial number, phone, and symptoms.
-- **Intelligent Slot Management:** Automatic collision avoidance, past-slot filtering, and **instant slot re-enabling upon appointment rejection**.
-- **Admin Date-Wise Schedule Management & Patient Absent Tracking:** Full calendar filtering allowing administrators to monitor **Today's approved appointments**, **Next Day's schedule**, or **Pick Any Date** via an interactive dot-marked calendar, daily clinical fee metrics, and **Patient Absent tracking** (unlocked when doctor schedule time arrives, with in-app patient alert and instant re-confirm/complete actions).
-- **Unique Serial Numbering:** Sequential non-overlapping serial generation (`SL-01`, `SL-02`, etc.) with recycling of rejected or cancelled visits.
-- **Digital Medical Intake:** Patients submit symptoms, blood group, medications, allergies, and attach medical documents/prescriptions via DocumentPicker.
-- **CarePoint Subscriptions (Patients & Doctors):**
-  - **Patients:** Multi-tier membership options (`CarePoint Plus` & `CarePoint VIP Family Pass`) with monthly or annual billing offering **20% to 30% discounts** on consultation fees.
-  - **Doctors:** Practice enhancement plans (`Doctor Starter`, `Doctor Pro Practice`, `Doctor Clinic Elite`) unlocking PRO badges, search ranking boosts, and verified practice recognition.
-- **Flexible Multi-Channel Payments:**
-  - **Stripe In-App Card Payments:** Secure online card checkout (Visa, Mastercard, Amex) with client-side Luhn validation, 1-tap test card quick-fill, and instant transaction receipts.
-  - **Pay at Clinic Reception:** Pay cash at clinic reception before entering consultation room.
-  - **I Will Pay Later:** Book urgent appointments instantly without upfront payment and settle fees on or before the visit.
-- **Emoji-Free WhatsApp Slips:** Clean, professional plain-text booking confirmation message formatted for SMS and WhatsApp without decorative icons or emojis.
-- **Real-Time Sync & In-App Alerts:** Live Firestore subscriptions (`onSnapshot`) with an in-app notification bell and unread badge.
-- **Resilient Offline Caching:** Isolated storage layer with in-memory fallback map preventing circular dependencies and crashes.
+---
+
+## 📱 Role-Based System Architecture & Features
+
+### 1. Patient Panel
+- Patient registration and login.
+- Search and browse admin-approved doctors.
+- View doctor profiles, consultation fees, and availability schedules.
+- Book appointments with specific doctors by providing the required information.
+- Choose online payment when confirming appointments.
+- View payment details and appointment history.
+- Receive WhatsApp messages after appointment confirmation.
+- Update personal profile information.
+- Receive appointment reminders 10 minutes before scheduled appointments using Expo Notifications.
+
+### 2. Doctor Panel
+- Doctor registration and login.
+- Newly registered doctor profiles require admin approval before becoming visible to patients.
+- View, approve, or reject patient appointment requests.
+- Manage availability schedules and consultation fees.
+- Update professional and personal profile information.
+- View upcoming appointments and patient serial numbers.
+- Manage subscription-related features.
+
+### 3. Admin Panel
+- Admin login using dummy credentials for demonstration purposes.
+- Approve or reject newly registered doctor profiles.
+- View all registered doctors and patients.
+- View daily doctor-wise patient appointment lists.
+- Track daily patient attendance.
+- Mark patients as Present or Absent.
+- Manage doctor profiles and appointments.
+- Delete or reject doctor profiles and appointments.
+- Monitor appointment details and payment information.
+- Access platform-wide doctor, patient, and appointment records.
+
+### 4. Payment & Subscription Management
+- Subscription management functionality.
+- Stripe test-mode payment simulation.
+- Custom TypeScript payment service.
+- Card number formatting and Luhn algorithm validation.
+- Card brand detection (Visa, Mastercard, and American Express).
+- Card expiry date and CVC validation.
+- Appointment payment selection and transaction status handling.
+- Simulated transaction receipt generation.
+- BDT currency support.
+
+### 5. Technologies, Integrations & Testing
+- **React Native & Expo:** Cross-platform mobile application development.
+- **TypeScript:** Type-safe application development.
+- **Expo Router:** File-based navigation and routing.
+- **Firebase Cloud Firestore:** Cloud database and real-time data management.
+- **Expo Notifications:** Appointment reminders and notifications.
+- **Stripe:** Test-mode payment configuration and simulated payment processing.
+- **WhatsApp Integration:** Appointment confirmation messaging.
+- **Xcode:** iOS build, deployment, and application testing.
+- **Role-Based Access Control:** Separate dashboards and permissions for Admin, Doctor, and Patient.
+
+---
+
+## 📥 Download Standalone Android APK
+
+- **Direct APK Download Link:** [Download CarePoint APK (v1.0.0)](https://expo.dev/artifacts/eas/yba9mAsdWza8itP9ZRFrobkS77EQRaK1mwOkD9Am5p0.apk)
+- **EAS Build Dashboard:** [EAS Build Details](https://expo.dev/accounts/sajid-chowdhury/projects/CarePoint/builds/f266c86a-83e3-4b5a-9859-f02a703dc8e2)
 
 ---
 
 ## 📖 Complete App Features Guide
 
-For a detailed step-by-step documentation of all workflows from user registration to appointment completion, read the **[CarePoint Full Feature Guide](file:///Users/sajid/Code/React%20native/CarePoint/APP_FEATURES_GUIDE.md)**.
+For a detailed step-by-step documentation of all workflows from user registration to appointment completion, read the **[CarePoint Full Feature Guide](APP_FEATURES_GUIDE.md)**.
 
 ---
 
