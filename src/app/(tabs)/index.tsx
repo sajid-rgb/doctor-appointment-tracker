@@ -16,10 +16,12 @@ import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { useDoctorStore } from '../../store/doctorStore';
+import { useSubscriptionStore } from '../../store/subscriptionStore';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const subscription = useSubscriptionStore((state) => state.subscription);
   const appointments = useAppointmentStore((state) => state.appointments);
   const isLoadingAppointments = useAppointmentStore((state) => state.isLoading);
   const fetchAppointments = useAppointmentStore(
@@ -110,6 +112,44 @@ export default function DashboardScreen() {
         </Text>
       </View>
 
+      {/* CarePoint Plus Membership Banner */}
+      {user?.role === 'patient' && (
+        <Pressable
+          style={styles.membershipBanner}
+          onPress={() => router.push('/subscribe')}
+        >
+          <View style={styles.membershipBannerIcon}>
+            <Ionicons name="sparkles" size={18} color="#D97706" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.membershipBannerTitle}>
+                {subscription?.status === 'active'
+                  ? subscription.tier === 'vip'
+                    ? 'CarePoint VIP Member'
+                    : 'CarePoint Plus Member'
+                  : 'Join CarePoint Plus'}
+              </Text>
+              {subscription?.status === 'active' ? (
+                <View style={styles.membershipActiveTag}>
+                  <Text style={styles.membershipActiveTagText}>ACTIVE</Text>
+                </View>
+              ) : (
+                <View style={styles.membershipSaveTag}>
+                  <Text style={styles.membershipSaveTagText}>SAVE 20%</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.membershipBannerDesc}>
+              {subscription?.status === 'active'
+                ? 'Enjoy 20% discount on all consultations & priority slots'
+                : 'Save 20% on consultations, get priority slots & instant care'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#0F766E" />
+        </Pressable>
+      )}
+
       <Text style={styles.sectionTitle}>Overview</Text>
 
       <View style={styles.statsGrid}>
@@ -158,7 +198,10 @@ export default function DashboardScreen() {
       ) : (
         recentAppointments.map((item) => {
           const isCompleted = item.status === 'completed';
-          const isCancelled = item.status === 'cancelled';
+          const isCancelled =
+            item.status === 'cancelled' ||
+            item.status === 'rejected' ||
+            item.status === 'absent';
           const doctor = doctors.find(
             (d) => d.id === item.doctorId || d.name === item.doctorName
           );
@@ -175,9 +218,36 @@ export default function DashboardScreen() {
               <View style={styles.patientInfo}>
                 <Text style={styles.patientName}>{item.doctorName}</Text>
                 <Text style={styles.doctorName}>{item.specialty}</Text>
-                <Text style={styles.time}>
-                  {item.date} • {item.time}
-                </Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginTop: 2,
+                  }}
+                >
+                  <Text style={styles.time}>
+                    {item.date} • {item.time}
+                  </Text>
+                  {item.paymentStatus === 'paid' && (
+                    <View style={styles.miniPaidBadge}>
+                      <Text style={styles.miniPaidText}>Paid</Text>
+                    </View>
+                  )}
+                  {(item.paymentStatus === 'pay_later' ||
+                    item.paymentMethod === 'pay_later') && (
+                    <View
+                      style={[
+                        styles.miniPaidBadge,
+                        { backgroundColor: '#EDE9FE' },
+                      ]}
+                    >
+                      <Text style={[styles.miniPaidText, { color: '#6D28D9' }]}>
+                        Pay Later
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
 
               <View
@@ -423,5 +493,68 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  membershipBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 20,
+  },
+  membershipBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  membershipBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  membershipActiveTag: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  membershipActiveTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  membershipSaveTag: {
+    backgroundColor: '#D97706',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  membershipSaveTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  membershipBannerDesc: {
+    fontSize: 11,
+    color: '#B45309',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  miniPaidBadge: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  miniPaidText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#0F766E',
   },
 });

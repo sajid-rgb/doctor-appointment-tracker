@@ -66,6 +66,13 @@ function normalizeAppointmentDoc(id: string, data: any): Appointment {
     date: data?.date || '',
     time: data?.time || '',
     status: (data?.status as AppointmentStatus) || 'pending',
+    paymentStatus: data?.paymentStatus,
+    paymentMethod: data?.paymentMethod,
+    paymentTransactionId: data?.paymentTransactionId,
+    originalFee:
+      typeof data?.originalFee === 'number' ? data.originalFee : undefined,
+    discountApplied:
+      typeof data?.discountApplied === 'number' ? data.discountApplied : undefined,
     createdAt: data?.createdAt || new Date().toISOString(),
   };
 }

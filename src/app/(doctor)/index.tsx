@@ -15,6 +15,7 @@ import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { useDoctorStore } from '../../store/doctorStore';
+import { useSubscriptionStore } from '../../store/subscriptionStore';
 
 const TEAL = '#0F766E';
 
@@ -227,6 +228,8 @@ export default function DoctorDashboard() {
     setRefreshing(false);
   };
 
+  const subscription = useSubscriptionStore((state) => state.subscription);
+
   return (
     <ScrollView
       style={styles.container}
@@ -273,6 +276,65 @@ export default function DoctorDashboard() {
         isSyncing={(isLoadingAppointments || isLoadingDoctors) && !refreshing}
         label="Syncing appointments..."
       />
+
+      {/* Doctor Practice Membership Banner */}
+      <TouchableOpacity
+        style={styles.doctorSubBanner}
+        activeOpacity={0.85}
+        onPress={() => router.push('/subscribe')}
+      >
+        <View style={styles.doctorSubIconBox}>
+          <Ionicons
+            name={
+              subscription?.status === 'active' &&
+              (subscription.tier === 'doctor_pro' ||
+                subscription.tier === 'doctor_elite')
+                ? 'shield-checkmark'
+                : 'sparkles'
+            }
+            size={18}
+            color={
+              subscription?.status === 'active' &&
+              (subscription.tier === 'doctor_pro' ||
+                subscription.tier === 'doctor_elite')
+                ? '#0F766E'
+                : '#D97706'
+            }
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.doctorSubTitle}>
+              {subscription?.status === 'active' &&
+              (subscription.tier === 'doctor_pro' ||
+                subscription.tier === 'doctor_elite')
+                ? subscription.tier === 'doctor_elite'
+                  ? 'Doctor Clinic Elite'
+                  : 'Doctor Pro Practice'
+                : 'Upgrade to Doctor Pro Practice'}
+            </Text>
+            {subscription?.status === 'active' &&
+            (subscription.tier === 'doctor_pro' ||
+              subscription.tier === 'doctor_elite') ? (
+              <View style={styles.proActiveTag}>
+                <Text style={styles.proActiveTagText}>VERIFIED PRO</Text>
+              </View>
+            ) : (
+              <View style={styles.proUpgradeTag}>
+                <Text style={styles.proUpgradeTagText}>PRO</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.doctorSubDesc}>
+            {subscription?.status === 'active' &&
+            (subscription.tier === 'doctor_pro' ||
+              subscription.tier === 'doctor_elite')
+              ? 'Featured in doctor searches • Unlimited bookings • 0% commission'
+              : 'Unlock top search placement, verified pro badge & unlimited patient bookings'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#0F766E" />
+      </TouchableOpacity>
 
       {/* Summary cards */}
       <View style={styles.summaryRow}>
@@ -885,5 +947,58 @@ const styles = StyleSheet.create({
     color: '#0F766E',
     fontWeight: '800',
     fontSize: 10,
+  },
+  doctorSubBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 20,
+  },
+  doctorSubIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doctorSubTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  proActiveTag: {
+    backgroundColor: '#0F766E',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  proActiveTagText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  proUpgradeTag: {
+    backgroundColor: '#D97706',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  proUpgradeTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  doctorSubDesc: {
+    fontSize: 11,
+    color: '#B45309',
+    marginTop: 2,
+    lineHeight: 15,
   },
 });

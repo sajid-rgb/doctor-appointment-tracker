@@ -20,12 +20,14 @@ import { DEFAULT_AVAILABILITY } from '../../constants/availability';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { type DoctorProfile, useDoctorStore } from '../../store/doctorStore';
+import { useSubscriptionStore } from '../../store/subscriptionStore';
 
 export default function DoctorProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const updateUserProfile = useAuthStore((state) => state.updateUserProfile);
   const logout = useAuthStore((state) => state.logout);
+  const subscription = useSubscriptionStore((state) => state.subscription);
   const doctors = useDoctorStore((state) => state.doctors);
   const isLoading = useDoctorStore((state) => state.isLoading);
   const fetchDoctors = useDoctorStore((state) => state.fetchDoctors);
@@ -462,6 +464,88 @@ export default function DoctorProfileScreen() {
             </Text>
           </View>
         </View>
+
+        {/* Doctor Practice Subscription Card */}
+        {subscription?.status === 'active' &&
+        (subscription.tier === 'doctor_pro' ||
+          subscription.tier === 'doctor_elite') ? (
+          <View style={styles.practiceSubCard}>
+            <View style={styles.practiceHeader}>
+              <View style={styles.proShieldIcon}>
+                <Ionicons name="shield-checkmark" size={18} color="#0F766E" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <Text style={styles.practiceTierTitle}>
+                    {subscription.tier === 'doctor_elite'
+                      ? 'Doctor Clinic Elite'
+                      : 'Doctor Pro Practice'}
+                  </Text>
+                  <View style={styles.proActiveBadge}>
+                    <Text style={styles.proActiveBadgeText}>VERIFIED PRO</Text>
+                  </View>
+                </View>
+                <Text style={styles.practiceSubDesc}>
+                  Featured search placement • Unlimited patient bookings • 0% commission
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.practiceDivider} />
+
+            <View style={styles.practiceFooter}>
+              <Text style={styles.practiceRenewalText}>
+                Renews{' '}
+                {new Date(subscription.renewalDate).toLocaleDateString(
+                  'en-GB',
+                  {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  }
+                )}
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.managePracticeBtn}
+                onPress={() => router.push('/subscribe')}
+              >
+                <Text style={styles.managePracticeBtnText}>Manage Plan</Text>
+                <Ionicons name="chevron-forward" size={14} color="#0F766E" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={styles.upgradePracticeBanner}
+            onPress={() => router.push('/subscribe')}
+          >
+            <View style={{ flex: 1 }}>
+              <View style={styles.upgradeBadgeSmall}>
+                <Ionicons name="sparkles" size={12} color="#FFFFFF" />
+                <Text style={styles.upgradeBadgeText}>DOCTOR PRO PRACTICE</Text>
+              </View>
+              <Text style={styles.upgradeBannerHeading}>
+                Get Featured & Unlock Unlimited Bookings
+              </Text>
+              <Text style={styles.upgradeBannerSubtitle}>
+                Upgrade to Pro Practice for verified search badge, 0% commission, and direct WhatsApp slips.
+              </Text>
+            </View>
+
+            <View style={styles.upgradeBannerAction}>
+              <Text style={styles.upgradeBannerActionText}>Upgrade</Text>
+              <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
@@ -1207,5 +1291,126 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontWeight: '700',
     fontSize: 14,
+  },
+  practiceSubCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#99F6E4',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  practiceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  proShieldIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  practiceTierTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  proActiveBadge: {
+    backgroundColor: '#0F766E',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  proActiveBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  practiceSubDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  practiceDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 12,
+  },
+  practiceFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  practiceRenewalText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+  managePracticeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  managePracticeBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  upgradePracticeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F766E',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  upgradeBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  upgradeBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  upgradeBannerHeading: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    lineHeight: 18,
+  },
+  upgradeBannerSubtitle: {
+    fontSize: 11,
+    color: '#CCFBF1',
+    marginTop: 4,
+    lineHeight: 15,
+  },
+  upgradeBannerAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  upgradeBannerActionText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });

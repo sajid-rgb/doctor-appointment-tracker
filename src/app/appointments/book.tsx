@@ -29,6 +29,8 @@ import {
 } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { useDoctorStore } from '../../store/doctorStore';
+import { useSubscriptionStore } from '../../store/subscriptionStore';
+import { StripePaymentModal } from '../../components/StripePaymentModal';
 import { notifyDoctorNewAppointment } from '../../utils/notifications';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
 
@@ -213,6 +215,23 @@ export default function BookAppointmentScreen() {
   >([]);
   const [isPickingFile, setIsPickingFile] = useState(false);
 
+  // Subscription & Stripe Payment States
+  const subscription = useSubscriptionStore((state) => state.subscription);
+  const getDiscountedFee = useSubscriptionStore(
+    (state) => state.getDiscountedFee
+  );
+
+  const baseFee = doctor?.fee ?? 0;
+  const finalFee = useMemo(() => {
+    return getDiscountedFee(baseFee);
+  }, [getDiscountedFee, baseFee]);
+  const discountAmount = Math.max(0, baseFee - finalFee);
+
+  const [paymentMethod, setPaymentMethod] = useState<
+    'cash' | 'stripe' | 'pay_later'
+  >('cash');
+  const [showStripeModal, setShowStripeModal] = useState(false);
+
   const handlePickDocument = async () => {
     try {
       setIsPickingFile(true);
@@ -286,7 +305,8 @@ export default function BookAppointmentScreen() {
           a.date === selectedDate &&
           a.time === selectedTime &&
           a.status !== 'cancelled' &&
-          a.status !== 'rejected'
+          a.status !== 'rejected' &&
+          a.status !== 'absent'
       );
 
       if (!isSlotValid || isBooked) {
@@ -303,7 +323,8 @@ export default function BookAppointmentScreen() {
         appointment.date === selectedDate &&
         appointment.time === selectedTime &&
         appointment.status !== 'cancelled' &&
-        appointment.status !== 'rejected'
+        appointment.status !== 'rejected' &&
+        appointment.status !== 'absent'
     );
   }, [appointments, doctorId, selectedDate, selectedTime]);
 
@@ -337,7 +358,7 @@ export default function BookAppointmentScreen() {
     );
   }
 
-  const handleBooking = async () => {
+  const validateIntakeForm = (): number | null => {
     if (!user || user.role !== 'patient') {
       Alert.alert(
         'Patient account required',
@@ -349,7 +370,7 @@ export default function BookAppointmentScreen() {
           },
         ]
       );
-      return;
+      return null;
     }
 
     if (!availability.acceptingAppointments) {
@@ -357,147 +378,181 @@ export default function BookAppointmentScreen() {
         'Not accepting appointments',
         'This doctor is currently not accepting new appointments.'
       );
-      return;
+      return null;
     }
 
     if (!selectedDate || !selectedTime) {
-      Alert.alert(
-        'Select date and time',
-        'Please choose an appointment date and time slot first.'
-      );
-      return;
-    }
+        Alert.alert(
+          'Select date and time',
+          'Please choose an appointment date and time slot first.'
+        );
+        return null;
+      }
 
-    if (isSelectedTimeBooked) {
-      Alert.alert(
-        'Time slot unavailable',
-        'This doctor already has an appointment for the selected slot.'
-      );
-      return;
-    }
+      if (isSelectedTimeBooked) {
+        Alert.alert(
+          'Time slot unavailable',
+          'This doctor already has an appointment for the selected slot.'
+        );
+        return null;
+      }
 
-    if (isSlotInPast(selectedDate, selectedTime)) {
-      Alert.alert(
-        'Time slot passed',
-        'The selected appointment time has already passed. Please select an upcoming time slot.'
-      );
-      return;
-    }
+      if (isSlotInPast(selectedDate, selectedTime)) {
+        Alert.alert(
+          'Time slot passed',
+          'The selected appointment time has already passed. Please select an upcoming time slot.'
+        );
+        return null;
+      }
 
-    const ageNum = parseInt(patientAge.trim(), 10);
-    if (
-      !patientAge.trim() ||
-      Number.isNaN(ageNum) ||
-      ageNum <= 0 ||
-      ageNum > 130
-    ) {
-      Alert.alert('Age required', 'Please enter a valid patient age (1-130).');
-      return;
-    }
+      const ageNum = parseInt(patientAge.trim(), 10);
+      if (
+        !patientAge.trim() ||
+        Number.isNaN(ageNum) ||
+        ageNum <= 0 ||
+        ageNum > 130
+      ) {
+        Alert.alert('Age required', 'Please enter a valid patient age (1-130).');
+        return null;
+      }
 
-    if (!patientPhone.trim()) {
-      Alert.alert(
-        'Contact phone required',
-        'Please provide a contact phone number so the clinic can reach you.'
-      );
-      return;
-    }
+      if (!patientPhone.trim()) {
+        Alert.alert(
+          'Contact phone required',
+          'Please provide a contact phone number so the clinic can reach you.'
+        );
+        return null;
+      }
 
-    if (!bloodGroup.trim()) {
-      Alert.alert(
-        'Blood group required',
-        'Please select the patient blood group.'
-      );
-      return;
-    }
+      if (!bloodGroup.trim()) {
+        Alert.alert(
+          'Blood group required',
+          'Please select the patient blood group.'
+        );
+        return null;
+      }
 
-    if (!condition.trim()) {
-      Alert.alert(
-        'Medical condition required',
-        'Please provide a brief description of your symptoms or reason for visit.'
-      );
-      return;
-    }
+      if (!condition.trim()) {
+        Alert.alert(
+          'Medical condition required',
+          'Please provide a brief description of your symptoms or reason for visit.'
+        );
+        return null;
+      }
 
-    setIsBooking(true);
+      return ageNum;
+    };
 
-    try {
-      const created = addAppointment({
-        patientId: user.id,
-        patientName: user.name,
-        patientAge: ageNum,
-        patientGender,
-        patientPhone: patientPhone.trim(),
-        bloodGroup: bloodGroup.trim(),
-        condition: condition.trim(),
-        previousDocuments:
-          previousDocuments.trim() || 'No previous documents provided',
-        prescriptionFiles:
-          prescriptionFiles.length > 0 ? prescriptionFiles : undefined,
-        additionalNotes: additionalNotes.trim() || undefined,
-        doctorId: doctor.id,
-        doctorName: doctor.name,
-        specialty: doctor.specialty,
-        fee: doctor.fee,
-        date: selectedDate,
-        time: selectedTime,
-      });
+    const proceedWithBooking = async (payment: {
+      method: 'cash' | 'stripe' | 'pay_later';
+      status: 'pending' | 'paid' | 'pay_later';
+      transactionId?: string;
+    }) => {
+      const ageNum = validateIntakeForm();
+      if (!ageNum || !doctor || !selectedTime) return;
+      const slotTime = selectedTime;
 
-      // Update patient profile for future bookings
-      updateUserProfile({
-        age: ageNum,
-        gender: patientGender,
-        phone: patientPhone.trim(),
-        bloodGroup: bloodGroup.trim(),
-      });
+      setIsBooking(true);
 
-      // Immediately notify the doctor about new appointment
-      await notifyDoctorNewAppointment({
-        doctorId: doctor.id,
-        doctorName: doctor.name,
-        patientName: user.name,
-        date: selectedDate,
-        time: selectedTime,
-        serialNumber: created.serialNumber,
-        appointmentId: created.id,
-      });
+      try {
+        const created = addAppointment({
+          patientId: user.id,
+          patientName: user.name,
+          patientAge: ageNum,
+          patientGender,
+          patientPhone: patientPhone.trim(),
+          bloodGroup: bloodGroup.trim(),
+          condition: condition.trim(),
+          previousDocuments:
+            previousDocuments.trim() || 'No previous documents provided',
+          prescriptionFiles:
+            prescriptionFiles.length > 0 ? prescriptionFiles : undefined,
+          additionalNotes: additionalNotes.trim() || undefined,
+          doctorId: doctor.id,
+          doctorName: doctor.name,
+          specialty: doctor.specialty,
+          fee: finalFee,
+          originalFee: discountAmount > 0 ? baseFee : undefined,
+          discountApplied: discountAmount > 0 ? discountAmount : undefined,
+          paymentMethod: payment.method,
+          paymentStatus: payment.status,
+          paymentTransactionId: payment.transactionId,
+          date: selectedDate,
+          time: slotTime,
+        });
 
-      // Note: Patient is NOT notified instantly upon creation.
-      // Patient will be notified after the doctor confirms the appointment.
+        // Update patient profile for future bookings
+        updateUserProfile({
+          age: ageNum,
+          gender: patientGender,
+          phone: patientPhone.trim(),
+          bloodGroup: bloodGroup.trim(),
+        });
 
-      Alert.alert(
-        '🎉 Appointment Booked!',
-        `Your appointment request has been submitted to Dr. ${doctor.name}.\n\n🎟️ Serial Number: ${created.serialNumber}\n📅 Date: ${selectedDate} (${selectedTime})\nStatus: Pending Doctor Confirmation\n\nYou will be notified as soon as Dr. ${doctor.name} confirms your appointment.\n\nSend booking slip to WhatsApp?`,
-        [
-          {
-            text: 'View Appointments',
-            style: 'cancel',
-            onPress: () => router.replace('/(tabs)/appointments'),
-          },
-          {
-            text: 'Send to WhatsApp',
-            onPress: async () => {
-              await sendWhatsAppNotification({
-                phone: patientPhone.trim(),
-                serialNumber: created.serialNumber,
-                patientName: user.name,
-                doctorName: doctor.name,
-                specialty: doctor.specialty,
-                date: selectedDate,
-                time: selectedTime,
-                fee: doctor.fee,
-              });
-              router.replace('/(tabs)/appointments');
+        // Immediately notify the doctor about new appointment
+        await notifyDoctorNewAppointment({
+          doctorId: doctor.id,
+          doctorName: doctor.name,
+          patientName: user.name,
+          date: selectedDate,
+          time: slotTime,
+          serialNumber: created.serialNumber,
+          appointmentId: created.id,
+        });
+
+        const paymentNotice =
+          payment.method === 'stripe'
+            ? `Payment: Paid ৳${finalFee} online via Stripe (Receipt: ${payment.transactionId?.slice(0, 14)}...)`
+            : payment.method === 'pay_later'
+            ? `Payment: Pay Later (৳${finalFee} due on or before appointment)`
+            : `Payment: Pay ৳${finalFee} in cash at clinic reception`;
+
+        Alert.alert(
+          'Appointment Booked!',
+          `Your appointment request has been submitted to Dr. ${doctor.name}.\n\nSerial Number: ${created.serialNumber}\nDate: ${selectedDate} (${slotTime})\n${paymentNotice}\nStatus: Pending Doctor Confirmation\n\nYou will be notified as soon as Dr. ${doctor.name} confirms your appointment.\n\nSend booking slip to WhatsApp?`,
+          [
+            {
+              text: 'View Appointments',
+              style: 'cancel',
+              onPress: () => router.replace('/(tabs)/appointments'),
             },
-          },
-        ]
-      );
-    } catch {
-      Alert.alert('Booking failed', 'Something went wrong. Please try again.');
-    } finally {
-      setIsBooking(false);
-    }
-  };
+            {
+              text: 'Send to WhatsApp',
+              onPress: async () => {
+                await sendWhatsAppNotification({
+                  phone: patientPhone.trim(),
+                  serialNumber: created.serialNumber,
+                  patientName: user.name,
+                  doctorName: doctor.name,
+                  specialty: doctor.specialty,
+                  date: selectedDate,
+                  time: slotTime,
+                  fee: finalFee,
+                });
+                router.replace('/(tabs)/appointments');
+              },
+            },
+          ]
+        );
+      } catch {
+        Alert.alert('Booking failed', 'Something went wrong. Please try again.');
+      } finally {
+        setIsBooking(false);
+      }
+    };
+
+    const handleBooking = async () => {
+      const valid = validateIntakeForm();
+      if (!valid) return;
+
+      if (paymentMethod === 'stripe' && finalFee > 0) {
+        setShowStripeModal(true);
+      } else if (paymentMethod === 'pay_later') {
+        await proceedWithBooking({ method: 'pay_later', status: 'pay_later' });
+      } else {
+        await proceedWithBooking({ method: 'cash', status: 'pending' });
+      }
+    };
 
   return (
     <ScrollView
@@ -536,7 +591,26 @@ export default function BookAppointmentScreen() {
 
         <View style={styles.feeContainer}>
           <Text style={styles.feeLabel}>Fee</Text>
-          <Text style={styles.fee}>৳{doctor.fee}</Text>
+          {discountAmount > 0 ? (
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text
+                style={[
+                  styles.fee,
+                  {
+                    fontSize: 12,
+                    textDecorationLine: 'line-through',
+                    color: '#94A3B8',
+                    marginBottom: 1,
+                  },
+                ]}
+              >
+                ৳{baseFee}
+              </Text>
+              <Text style={styles.fee}>৳{finalFee}</Text>
+            </View>
+          ) : (
+            <Text style={styles.fee}>৳{doctor.fee}</Text>
+          )}
         </View>
       </View>
 
@@ -658,7 +732,8 @@ export default function BookAppointmentScreen() {
                     a.date === selectedDate &&
                     a.time === time &&
                     a.status !== 'cancelled' &&
-                    a.status !== 'rejected'
+                    a.status !== 'rejected' &&
+                    a.status !== 'absent'
                 );
 
                 return (
@@ -1106,9 +1181,178 @@ export default function BookAppointmentScreen() {
             <View style={styles.divider} />
 
             <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>Consultation Fee</Text>
-              <Text style={styles.totalFee}>৳{doctor.fee}</Text>
+              <Text style={styles.summaryLabel}>Base Consultation Fee</Text>
+              <Text style={styles.summaryValue}>৳{baseFee}</Text>
             </View>
+
+            {discountAmount > 0 ? (
+              <View style={styles.summaryRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text
+                    style={[
+                      styles.summaryLabel,
+                      { color: '#0F766E', fontWeight: '700' },
+                    ]}
+                  >
+                    {subscription?.tier === 'vip'
+                      ? 'VIP Member Discount (30%)'
+                      : 'Plus Member Discount (20%)'}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    { color: '#0F766E', fontWeight: '800' },
+                  ]}
+                >
+                  -৳{discountAmount}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.divider} />
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.totalLabel}>Total Payable</Text>
+              <Text style={styles.totalFee}>৳{finalFee}</Text>
+            </View>
+          </View>
+
+          {/* Membership Promo if not subscribed */}
+          {discountAmount === 0 && (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.membershipPromoCard}
+              onPress={() => router.push('/subscribe')}
+            >
+              <View style={styles.promoIconBox}>
+                <Ionicons name="sparkles" size={18} color="#D97706" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.promoTitle}>CarePoint Plus Member Savings</Text>
+                <Text style={styles.promoDesc}>
+                  Save 20% on this and all future consultations. Subscribe now.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#0F766E" />
+            </TouchableOpacity>
+          )}
+
+          {/* Payment Method Selector */}
+          <View style={styles.paymentMethodCard}>
+            <Text style={styles.paymentSectionTitle}>Payment Method</Text>
+            <Text style={styles.fieldHint}>
+              Select your preferred payment option for this consultation.
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[
+                styles.paymentOption,
+                paymentMethod === 'stripe' && styles.paymentOptionSelected,
+              ]}
+              onPress={() => setPaymentMethod('stripe')}
+            >
+              <View
+                style={[
+                  styles.paymentRadio,
+                  paymentMethod === 'stripe' && styles.paymentRadioActive,
+                ]}
+              >
+                {paymentMethod === 'stripe' && (
+                  <View style={styles.paymentRadioInner} />
+                )}
+              </View>
+              <View style={styles.paymentIconBox}>
+                <Ionicons name="card" size={20} color="#0F766E" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.paymentOptionTitle}>
+                    Pay Online with Stripe
+                  </Text>
+                  <View style={styles.stripeBadge}>
+                    <Text style={styles.stripeBadgeText}>Instant</Text>
+                  </View>
+                </View>
+                <Text style={styles.paymentOptionDesc}>
+                  Visa, Mastercard, Amex. Instant booking confirmation.
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[
+                styles.paymentOption,
+                paymentMethod === 'cash' && styles.paymentOptionSelected,
+              ]}
+              onPress={() => setPaymentMethod('cash')}
+            >
+              <View
+                style={[
+                  styles.paymentRadio,
+                  paymentMethod === 'cash' && styles.paymentRadioActive,
+                ]}
+              >
+                {paymentMethod === 'cash' && (
+                  <View style={styles.paymentRadioInner} />
+                )}
+              </View>
+              <View
+                style={[
+                  styles.paymentIconBox,
+                  { backgroundColor: '#FEF3C7' },
+                ]}
+              >
+                <Ionicons name="cash-outline" size={20} color="#D97706" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.paymentOptionTitle}>Pay at Clinic Counter</Text>
+                <Text style={styles.paymentOptionDesc}>
+                  Pay cash at clinic reception before entering consultation room.
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[
+                styles.paymentOption,
+                paymentMethod === 'pay_later' && styles.paymentOptionSelected,
+              ]}
+              onPress={() => setPaymentMethod('pay_later')}
+            >
+              <View
+                style={[
+                  styles.paymentRadio,
+                  paymentMethod === 'pay_later' && styles.paymentRadioActive,
+                ]}
+              >
+                {paymentMethod === 'pay_later' && (
+                  <View style={styles.paymentRadioInner} />
+                )}
+              </View>
+              <View
+                style={[
+                  styles.paymentIconBox,
+                  { backgroundColor: '#EDE9FE' },
+                ]}
+              >
+                <Ionicons name="time-outline" size={20} color="#7C3AED" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.paymentOptionTitle}>I Will Pay Later</Text>
+                  <View style={[styles.stripeBadge, { backgroundColor: '#EDE9FE' }]}>
+                    <Text style={[styles.stripeBadgeText, { color: '#6D28D9' }]}>Flexible</Text>
+                  </View>
+                </View>
+                <Text style={styles.paymentOptionDesc}>
+                  Book instantly now and settle the ৳{finalFee} fee later before consultation.
+                </Text>
+              </View>
+            </TouchableOpacity>
           </View>
 
           <Pressable
@@ -1135,16 +1379,51 @@ export default function BookAppointmentScreen() {
             onPress={handleBooking}
           >
             <Text style={styles.primaryButtonText}>
-              {isBooking ? 'Submitting...' : 'Confirm Appointment'}
+              {isBooking
+                ? 'Submitting...'
+                : paymentMethod === 'stripe'
+                ? `Pay Online & Confirm (৳${finalFee})`
+                : paymentMethod === 'pay_later'
+                ? `Confirm Booking (Pay ৳${finalFee} Later)`
+                : `Confirm Appointment (Pay ৳${finalFee} at Clinic)`}
             </Text>
             {!isBooking && (
-              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+              <Ionicons
+                name={
+                  paymentMethod === 'stripe'
+                    ? 'card-outline'
+                    : paymentMethod === 'pay_later'
+                    ? 'time-outline'
+                    : 'arrow-forward'
+                }
+                size={18}
+                color="#FFFFFF"
+              />
             )}
           </Pressable>
 
           <Text style={styles.disclaimer}>
             This appointment request uses the doctor's live availability schedule.
           </Text>
+
+          {/* Stripe In-App Payment Sheet Modal */}
+          <StripePaymentModal
+            visible={showStripeModal}
+            onClose={() => setShowStripeModal(false)}
+            onSuccess={async (result) => {
+              setShowStripeModal(false);
+              await proceedWithBooking({
+                method: 'stripe',
+                status: 'paid',
+                transactionId: result.transactionId,
+              });
+            }}
+            amountBDT={finalFee}
+            title={`Dr. ${doctor.name}`}
+            subtitle={`${doctor.specialty} Consultation`}
+            customerName={user.name}
+            customerEmail={user.email}
+          />
         </>
       )}
     </ScrollView>
@@ -1803,5 +2082,112 @@ const styles = StyleSheet.create({
     color: '#0F766E',
     fontWeight: '800',
     fontSize: 13,
+  },
+  membershipPromoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 16,
+  },
+  promoIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promoTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  promoDesc: {
+    fontSize: 12,
+    color: '#B45309',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  paymentMethodCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 18,
+  },
+  paymentSectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 10,
+  },
+  paymentOptionSelected: {
+    backgroundColor: '#F0FDFA',
+    borderColor: '#0F766E',
+  },
+  paymentRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentRadioActive: {
+    borderColor: '#0F766E',
+  },
+  paymentRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#0F766E',
+  },
+  paymentIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentOptionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  paymentOptionDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  stripeBadge: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  stripeBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0F766E',
   },
 });

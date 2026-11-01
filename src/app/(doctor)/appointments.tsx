@@ -20,6 +20,7 @@ import type {
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { useDoctorStore } from '../../store/doctorStore';
+import { isSlotInPast } from '../../constants/availability';
 import { useNotificationStore } from '../../store/notificationStore';
 import { notifyPatientAppointmentStatus } from '../../utils/notifications';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
@@ -110,6 +111,7 @@ export default function DoctorAppointmentsScreen() {
       confirmed: `Confirm appointment for Serial ${appointment.serialNumber}?`,
       rejected: 'Reject this appointment?',
       completed: 'Mark this appointment as completed?',
+      absent: `Mark ${appointment.patientName || 'Patient'} as absent for scheduled consultation at ${appointment.time}?`,
     };
 
     Alert.alert('Update appointment', labels[status] ?? 'Continue?', [
@@ -228,6 +230,7 @@ export default function DoctorAppointmentsScreen() {
                 item.status === 'completed' && styles.completedBadge,
                 item.status === 'rejected' && styles.rejectedBadge,
                 item.status === 'cancelled' && styles.cancelledBadge,
+                item.status === 'absent' && styles.absentBadge,
               ]}
             >
               <Text
@@ -237,6 +240,7 @@ export default function DoctorAppointmentsScreen() {
                   item.status === 'completed' && styles.completedText,
                   item.status === 'rejected' && styles.rejectedText,
                   item.status === 'cancelled' && styles.cancelledText,
+                  item.status === 'absent' && styles.absentText,
                 ]}
               >
                 {item.status.toUpperCase()}
@@ -352,8 +356,28 @@ export default function DoctorAppointmentsScreen() {
               <Text style={styles.scheduleText}>{item.time}</Text>
             </View>
 
-            <View style={styles.scheduleItem}>
+            <View style={[styles.scheduleItem, { gap: 6 }]}>
               <Text style={styles.feeText}>৳{item.fee}</Text>
+              {item.paymentStatus === 'paid' ? (
+                <View style={styles.paidChip}>
+                  <Text style={styles.paidChipText}>Paid (Stripe)</Text>
+                </View>
+              ) : item.paymentStatus === 'pay_later' || item.paymentMethod === 'pay_later' ? (
+                <View
+                  style={[
+                    styles.paidChip,
+                    { backgroundColor: '#EDE9FE', borderColor: '#DDD6FE' },
+                  ]}
+                >
+                  <Text style={[styles.paidChipText, { color: '#6D28D9' }]}>
+                    Pay Later
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.unpaidChip}>
+                  <Text style={styles.unpaidChipText}>Pay at Clinic</Text>
+                </View>
+              )}
             </View>
           </View>
 
@@ -389,13 +413,51 @@ export default function DoctorAppointmentsScreen() {
           )}
 
           {item.status === 'confirmed' && (
-            <Pressable
-              style={[styles.button, styles.completeButton]}
-              onPress={() => changeStatus(item, 'completed')}
-            >
-              <Ionicons name="checkmark-done" size={17} color="#FFFFFF" />
-              <Text style={styles.buttonText}>Mark as Completed</Text>
-            </Pressable>
+            <View style={{ gap: 8, marginTop: 10 }}>
+              <Pressable
+                style={[styles.button, styles.completeButton, { marginTop: 0 }]}
+                onPress={() => changeStatus(item, 'completed')}
+              >
+                <Ionicons name="checkmark-done" size={17} color="#FFFFFF" />
+                <Text style={styles.buttonText}>Mark as Completed</Text>
+              </Pressable>
+
+              {isSlotInPast(item.date, item.time) ? (
+                <Pressable
+                  style={[styles.button, styles.absentButton, { marginTop: 0 }]}
+                  onPress={() => changeStatus(item, 'absent')}
+                >
+                  <Ionicons name="person-remove-outline" size={16} color="#DC2626" />
+                  <Text style={styles.absentButtonText}>Mark Patient Absent</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.schedulePendingPill}>
+                  <Ionicons name="time-outline" size={13} color="#64748B" />
+                  <Text style={styles.schedulePendingText}>
+                    Absent option unlocks at {item.time}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {item.status === 'absent' && (
+            <View style={[styles.actions, { marginTop: 10 }]}>
+              <Pressable
+                style={[styles.button, styles.confirmButton, { flex: 1, marginTop: 0 }]}
+                onPress={() => changeStatus(item, 'confirmed')}
+              >
+                <Ionicons name="refresh-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.buttonText}>Re-Confirm</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.button, styles.completeButton, { flex: 1, marginTop: 0 }]}
+                onPress={() => changeStatus(item, 'completed')}
+              >
+                <Ionicons name="checkmark-done" size={16} color="#FFFFFF" />
+                <Text style={styles.buttonText}>Complete</Text>
+              </Pressable>
+            </View>
           )}
         </View>
       )}
@@ -466,11 +528,13 @@ const styles = StyleSheet.create({
   completedBadge: { backgroundColor: '#DBEAFE' },
   rejectedBadge: { backgroundColor: '#FEE2E2' },
   cancelledBadge: { backgroundColor: '#F1F5F9' },
+  absentBadge: { backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FECACA' },
   statusText: { fontSize: 11, fontWeight: '800', color: '#92400E' },
   confirmedText: { color: '#166534' },
   completedText: { color: '#1E40AF' },
   rejectedText: { color: '#991B1B' },
   cancelledText: { color: '#475569' },
+  absentText: { color: '#B91C1C' },
   vitalsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -562,6 +626,28 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F766E',
   },
+  paidChip: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  paidChipText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  unpaidChip: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  unpaidChipText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#64748B',
+  },
   actions: { flexDirection: 'row', gap: 10, marginTop: 14 },
   button: {
     flexDirection: 'row',
@@ -576,6 +662,33 @@ const styles = StyleSheet.create({
   confirmButton: { flex: 1, backgroundColor: '#0F766E' },
   rejectButton: { flex: 1, backgroundColor: '#DC2626' },
   completeButton: { backgroundColor: '#2563EB' },
+  absentButton: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  absentButtonText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  schedulePendingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  schedulePendingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
   buttonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   empty: {
     flex: 1,

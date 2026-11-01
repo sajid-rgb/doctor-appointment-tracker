@@ -44,6 +44,7 @@ const STATUS_OPTIONS: StatusFilter[] = [
   'rejected',
   'completed',
   'cancelled',
+  'absent',
 ];
 
 const DATE_OPTIONS: { label: string; value: DateFilter }[] = [
@@ -62,6 +63,7 @@ const STATUS_COLORS: Record<
   rejected: { background: '#FEE2E2', text: '#991B1B' },
   completed: { background: '#DBEAFE', text: '#1D4ED8' },
   cancelled: { background: '#F1F5F9', text: '#475569' },
+  absent: { background: '#FEE2E2', text: '#B91C1C' },
 };
 
 function toISODate(date: Date) {
@@ -457,7 +459,38 @@ export default function PatientAppointmentsScreen() {
         <View style={styles.bottomRow}>
           <View>
             <Text style={styles.feeLabel}>Consultation fee</Text>
-            <Text style={styles.fee}>৳{item.fee}</Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                marginTop: 2,
+              }}
+            >
+              <Text style={styles.fee}>৳{item.fee}</Text>
+              {item.paymentStatus === 'paid' ? (
+                <View style={styles.paidChip}>
+                  <Ionicons name="card" size={11} color="#0F766E" />
+                  <Text style={styles.paidChipText}>Paid (Stripe)</Text>
+                </View>
+              ) : item.paymentStatus === 'pay_later' || item.paymentMethod === 'pay_later' ? (
+                <View
+                  style={[
+                    styles.paidChip,
+                    { backgroundColor: '#EDE9FE', borderColor: '#DDD6FE' },
+                  ]}
+                >
+                  <Ionicons name="time" size={11} color="#7C3AED" />
+                  <Text style={[styles.paidChipText, { color: '#6D28D9' }]}>
+                    Pay Later
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.unpaidChip}>
+                  <Text style={styles.unpaidChipText}>Pay at Clinic</Text>
+                </View>
+              )}
+            </View>
           </View>
 
           <View style={styles.bottomActionsRow}>
@@ -867,6 +900,31 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F766E',
     marginTop: 3,
+  },
+  paidChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  paidChipText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  unpaidChip: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  unpaidChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
   },
   cancelButton: {
     borderWidth: 1,

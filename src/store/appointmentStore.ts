@@ -16,7 +16,8 @@ export type AppointmentStatus =
   | 'confirmed'
   | 'rejected'
   | 'completed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'absent';
 
 export type UploadedPrescriptionFile = {
   name: string;
@@ -45,6 +46,11 @@ export type Appointment = {
   date: string;
   time: string;
   status: AppointmentStatus;
+  paymentStatus?: 'pending' | 'paid' | 'pay_later';
+  paymentMethod?: 'cash' | 'stripe' | 'pay_later';
+  paymentTransactionId?: string;
+  originalFee?: number;
+  discountApplied?: number;
   createdAt: string;
 };
 

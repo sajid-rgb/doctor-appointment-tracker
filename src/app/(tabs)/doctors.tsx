@@ -48,9 +48,8 @@ export default function DoctorsScreen() {
   );
 
   const filteredDoctors = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return doctors.filter((doctor) => {
+    const query = search.toLowerCase().trim();
+    const filtered = doctors.filter((doctor) => {
       const approved = doctor.approvalStatus === 'approved';
       const matchesSpecialty =
         specialty === 'All' || doctor.specialty === specialty;
@@ -63,6 +62,20 @@ export default function DoctorsScreen() {
         doctor.bio?.toLowerCase().includes(query);
 
       return approved && matchesSpecialty && matchesSearch;
+    });
+
+    return filtered.sort((a, b) => {
+      const aPro =
+        a.isFeatured ||
+        a.subscriptionTier === 'doctor_pro' ||
+        a.subscriptionTier === 'doctor_elite';
+      const bPro =
+        b.isFeatured ||
+        b.subscriptionTier === 'doctor_pro' ||
+        b.subscriptionTier === 'doctor_elite';
+      if (aPro && !bPro) return -1;
+      if (!aPro && bPro) return 1;
+      return 0;
     });
   }, [doctors, search, specialty]);
 
@@ -158,7 +171,17 @@ export default function DoctorsScreen() {
             />
 
             <View style={styles.info}>
-              <Text style={styles.name}>{item.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.name}>{item.name}</Text>
+                {(item.isFeatured ||
+                  item.subscriptionTier === 'doctor_pro' ||
+                  item.subscriptionTier === 'doctor_elite') && (
+                  <View style={styles.proDoctorBadge}>
+                    <Ionicons name="shield-checkmark" size={10} color="#FFFFFF" />
+                    <Text style={styles.proDoctorText}>PRO</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.specialty}>{item.specialty}</Text>
               <Text style={styles.qualification}>{item.qualification}</Text>
               <Text style={styles.experience}>
@@ -291,4 +314,19 @@ const styles = StyleSheet.create({
   bookText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
   empty: { alignItems: 'center', paddingTop: 70, gap: 10 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  proDoctorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#0F766E',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  proDoctorText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
 });

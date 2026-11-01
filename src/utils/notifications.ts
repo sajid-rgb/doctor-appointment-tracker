@@ -226,7 +226,13 @@ export async function notifyPatientAppointmentStatus(
     time: string;
     serialNumber: string;
   },
-  status: 'pending' | 'confirmed' | 'rejected' | 'completed' | 'cancelled'
+  status:
+    | 'pending'
+    | 'confirmed'
+    | 'rejected'
+    | 'completed'
+    | 'cancelled'
+    | 'absent'
 ): Promise<void> {
   if (!appointment.patientId) return;
 
@@ -281,6 +287,20 @@ export async function notifyPatientAppointmentStatus(
       title: 'Appointment Completed ✅',
       message: `Your consultation with Dr. ${appointment.doctorName} on ${appointment.date} (Serial: ${appointment.serialNumber}) was completed.`,
       type: 'patient_booking_confirmation',
+      appointmentId: appointment.id,
+      doctorName: appointment.doctorName,
+      patientName: appointment.patientName,
+      date: appointment.date,
+      time: appointment.time,
+      serialNumber: appointment.serialNumber,
+    });
+  } else if (status === 'absent') {
+    useNotificationStore.getState().addNotification({
+      recipientId: appointment.patientId,
+      recipientRole: 'patient',
+      title: 'Marked Absent ⚠️',
+      message: `You were marked absent for your appointment with Dr. ${appointment.doctorName} on ${appointment.date} (${appointment.time}). Please contact reception to reschedule.`,
+      type: 'appointment_cancelled',
       appointmentId: appointment.id,
       doctorName: appointment.doctorName,
       patientName: appointment.patientName,

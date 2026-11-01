@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
+import { useSubscriptionStore } from '../../store/subscriptionStore';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'] as const;
 const GENDER_OPTIONS = ['Male', 'Female', 'Other'] as const;
@@ -25,6 +26,7 @@ export default function PatientProfileScreen() {
   const updateUserProfile = useAuthStore((state) => state.updateUserProfile);
   const logout = useAuthStore((state) => state.logout);
   const appointments = useAppointmentStore((state) => state.appointments);
+  const subscription = useSubscriptionStore((state) => state.subscription);
 
   const [isEditing, setIsEditing] = useState(false);
 
@@ -160,6 +162,84 @@ export default function PatientProfileScreen() {
             <Text style={styles.roleBadgeText}>Patient Profile</Text>
           </View>
         </View>
+
+        {/* CarePoint Membership Status Card */}
+        {subscription?.status === 'active' ? (
+          <View style={styles.membershipActiveCard}>
+            <View style={styles.membershipHeader}>
+              <View style={styles.membershipIconBox}>
+                <Ionicons name="sparkles" size={18} color="#D97706" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <Text style={styles.membershipTierTitle}>
+                    {subscription.tier === 'vip'
+                      ? 'CarePoint VIP Pass'
+                      : 'CarePoint Plus Member'}
+                  </Text>
+                  <View style={styles.activePill}>
+                    <Text style={styles.activePillText}>Active</Text>
+                  </View>
+                </View>
+                <Text style={styles.membershipSubtext}>
+                  {subscription.tier === 'vip'
+                    ? '30% off all consultations • Free specialist visits'
+                    : '20% off all consultations • Priority clinic booking'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.membershipDivider} />
+
+            <View style={styles.membershipFooter}>
+              <Text style={styles.membershipRenewal}>
+                Renews{' '}
+                {new Date(subscription.renewalDate).toLocaleDateString(
+                  'en-GB',
+                  { day: 'numeric', month: 'short', year: 'numeric' }
+                )}
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.managePlanBtn}
+                onPress={() => router.push('/subscribe')}
+              >
+                <Text style={styles.managePlanBtnText}>Manage Plan</Text>
+                <Ionicons name="chevron-forward" size={14} color="#0F766E" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={styles.membershipPromoBanner}
+            onPress={() => router.push('/subscribe')}
+          >
+            <View style={styles.promoBannerLeft}>
+              <View style={styles.promoBadgeSmall}>
+                <Ionicons name="sparkles" size={12} color="#FFFFFF" />
+                <Text style={styles.promoBadgeText}>CarePoint Plus</Text>
+              </View>
+              <Text style={styles.promoBannerHeading}>
+                Save 20% on every doctor appointment
+              </Text>
+              <Text style={styles.promoBannerSubtitle}>
+                Starting at only ৳999/mo. Priority slots & instant booking.
+              </Text>
+            </View>
+
+            <View style={styles.promoBannerAction}>
+              <Text style={styles.promoBannerActionText}>Explore</Text>
+              <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
@@ -815,5 +895,128 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontWeight: '700',
     fontSize: 14,
+  },
+  membershipActiveCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#99F6E4',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  membershipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  membershipIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  membershipTierTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  activePill: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  activePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  membershipSubtext: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  membershipDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 12,
+  },
+  membershipFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  membershipRenewal: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+  managePlanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  managePlanBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  membershipPromoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F766E',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  promoBannerLeft: {
+    flex: 1,
+  },
+  promoBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  promoBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  promoBannerHeading: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    lineHeight: 18,
+  },
+  promoBannerSubtitle: {
+    fontSize: 11,
+    color: '#CCFBF1',
+    marginTop: 4,
+    lineHeight: 15,
+  },
+  promoBannerAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  promoBannerActionText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });

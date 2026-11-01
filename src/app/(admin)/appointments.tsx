@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   Alert,
@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Calendar, type DateData } from 'react-native-calendars';
 import {
   Appointment,
   AppointmentStatus,
@@ -21,18 +22,33 @@ import {
   isSerialNumberTaken,
   useAppointmentStore,
 } from '../../store/appointmentStore';
+import { isSlotInPast } from '../../constants/availability';
 import { notifyPatientAppointmentStatus } from '../../utils/notifications';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
 
 type Filter = 'all' | AppointmentStatus;
 
+export type DateFilter = 'all' | 'today' | 'tomorrow' | 'next7' | 'custom';
+
 const FILTERS: Filter[] = [
   'all',
-  'pending',
   'confirmed',
+  'pending',
+  'absent',
   'completed',
   'rejected',
   'cancelled',
+];
+
+const DATE_FILTERS: {
+  id: DateFilter;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}[] = [
+  { id: 'all', label: 'All Dates', icon: 'albums-outline' },
+  { id: 'today', label: 'Today', icon: 'today-outline' },
+  { id: 'tomorrow', label: 'Tomorrow', icon: 'calendar-outline' },
+  { id: 'next7', label: 'Next 7 Days', icon: 'time-outline' },
 ];
 
 const STATUS_ACTIONS: {
@@ -51,8 +67,80 @@ function formatFileSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function toISODate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseAppointmentDate(value?: string): string | null {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const parsed = new Date(`${value}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : value;
+  }
+  const match = value.match(/^(\d{1,2})\s+([a-zA-Z]{3,})$/);
+  if (match) {
+    const day = Number(match[1]);
+    const monthText = match[2].slice(0, 3).toLowerCase();
+    const months = [
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'may',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'oct',
+      'nov',
+      'dec',
+    ];
+    const month = months.indexOf(monthText);
+    if (month < 0 || day < 1 || day > 31) return null;
+    const now = new Date();
+    const year = now.getFullYear();
+    const parsed = new Date(year, month, day, 12);
+    if (parsed.getMonth() !== month || parsed.getDate() !== day) return null;
+    return toISODate(parsed);
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : toISODate(parsed);
+}
+
+function formatDisplayDate(isoDate: string): string {
+  try {
+    const d = new Date(`${isoDate}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return isoDate;
+    return d.toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return isoDate;
+  }
+}
+
+function isScheduleTimeReached(date?: string, time?: string): boolean {
+  if (!date || !time) return false;
+  const iso = parseAppointmentDate(date);
+  if (!iso) return true;
+  return isSlotInPast(iso, time);
+}
+
 export default function AdminAppointmentsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    dateFilter?: string;
+    status?: string;
+    date?: string;
+    approvedOnly?: string;
+  }>();
+
   const appointments = useAppointmentStore((state) => state.appointments);
   const updateStatus = useAppointmentStore(
     (state) => state.updateAppointmentStatus
@@ -64,7 +152,33 @@ export default function AdminAppointmentsScreen() {
     (state) => state.deleteAppointment
   );
 
-  const [filter, setFilter] = useState<Filter>('all');
+  const initialDateFilter: DateFilter =
+    params.dateFilter === 'today' ||
+    params.dateFilter === 'tomorrow' ||
+    params.dateFilter === 'next7' ||
+    params.dateFilter === 'custom'
+      ? params.dateFilter
+      : 'all';
+
+  const initialStatus: Filter =
+    params.status === 'confirmed' ||
+    params.status === 'pending' ||
+    params.status === 'absent' ||
+    params.status === 'completed' ||
+    params.status === 'rejected' ||
+    params.status === 'cancelled'
+      ? params.status
+      : 'all';
+
+  const [dateFilter, setDateFilter] = useState<DateFilter>(initialDateFilter);
+  const [selectedDate, setSelectedDate] = useState<string | null>(
+    params.date || null
+  );
+  const [calendarVisible, setCalendarVisible] = useState(false);
+  const [filter, setFilter] = useState<Filter>(initialStatus);
+  const [approvedOnly, setApprovedOnly] = useState<boolean>(
+    initialStatus === 'confirmed' || params.approvedOnly === 'true'
+  );
   const [search, setSearch] = useState('');
 
   // Serial Management Modal State
@@ -73,29 +187,149 @@ export default function AdminAppointmentsScreen() {
   const [serialInput, setSerialInput] = useState('');
   const [serialError, setSerialError] = useState('');
 
+  const today = useMemo(() => new Date(), []);
+  const todayISO = useMemo(() => toISODate(today), [today]);
+
+  const tomorrowISO = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + 1);
+    return toISODate(d);
+  }, [today]);
+
+  const next7ISO = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + 7);
+    return toISODate(d);
+  }, [today]);
+
+  const totalApprovedCount = useMemo(
+    () => appointments.filter((a) => a.status === 'confirmed').length,
+    [appointments]
+  );
+
+  const dateCounts = useMemo(() => {
+    const base = approvedOnly
+      ? appointments.filter((a) => a.status === 'confirmed')
+      : appointments;
+
+    return {
+      all: base.length,
+      today: base.filter((a) => parseAppointmentDate(a.date) === todayISO).length,
+      tomorrow: base.filter(
+        (a) => parseAppointmentDate(a.date) === tomorrowISO
+      ).length,
+      next7: base.filter((a) => {
+        const iso = parseAppointmentDate(a.date);
+        return !!iso && iso >= todayISO && iso <= next7ISO;
+      }).length,
+      custom: selectedDate
+        ? base.filter((a) => parseAppointmentDate(a.date) === selectedDate).length
+        : 0,
+    };
+  }, [
+    appointments,
+    approvedOnly,
+    todayISO,
+    tomorrowISO,
+    next7ISO,
+    selectedDate,
+  ]);
+
+  const markedDates = useMemo(() => {
+    const marks: Record<string, any> = {};
+    appointments.forEach((apt) => {
+      const iso = parseAppointmentDate(apt.date);
+      if (!iso) return;
+      if (!marks[iso]) {
+        marks[iso] = {
+          marked: true,
+          dotColor: apt.status === 'confirmed' ? '#0F766E' : '#94A3B8',
+        };
+      } else if (apt.status === 'confirmed') {
+        marks[iso].dotColor = '#0F766E';
+      }
+    });
+
+    if (selectedDate) {
+      marks[selectedDate] = {
+        ...(marks[selectedDate] || {}),
+        selected: true,
+        selectedColor: '#0F766E',
+      };
+    }
+
+    return marks;
+  }, [appointments, selectedDate]);
+
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return appointments.filter((item) => {
-      const matchesStatus = filter === 'all' || item.status === filter;
-      if (!matchesStatus) return false;
+    return appointments
+      .filter((item) => {
+        // Status filter or Approved Only mode
+        const matchesStatus = approvedOnly
+          ? item.status === 'confirmed'
+          : filter === 'all' || item.status === filter;
+        if (!matchesStatus) return false;
 
-      if (!query) return true;
+        // Date filter
+        const itemISO = parseAppointmentDate(item.date);
+        let matchesDate = true;
+        if (dateFilter === 'today') {
+          matchesDate = itemISO === todayISO;
+        } else if (dateFilter === 'tomorrow') {
+          matchesDate = itemISO === tomorrowISO;
+        } else if (dateFilter === 'next7') {
+          matchesDate = !!itemISO && itemISO >= todayISO && itemISO <= next7ISO;
+        } else if (dateFilter === 'custom') {
+          matchesDate = !!selectedDate && itemISO === selectedDate;
+        }
 
-      return (
-        item.patientName?.toLowerCase().includes(query) ||
-        item.doctorName?.toLowerCase().includes(query) ||
-        item.serialNumber?.toLowerCase().includes(query) ||
-        item.patientPhone?.toLowerCase().includes(query) ||
-        item.specialty?.toLowerCase().includes(query) ||
-        item.date?.toLowerCase().includes(query) ||
-        item.time?.toLowerCase().includes(query) ||
-        item.bloodGroup?.toLowerCase().includes(query) ||
-        item.condition?.toLowerCase().includes(query) ||
-        item.additionalNotes?.toLowerCase().includes(query)
-      );
-    });
-  }, [appointments, filter, search]);
+        if (!matchesDate) return false;
+
+        if (!query) return true;
+
+        return (
+          item.patientName?.toLowerCase().includes(query) ||
+          item.doctorName?.toLowerCase().includes(query) ||
+          item.serialNumber?.toLowerCase().includes(query) ||
+          item.patientPhone?.toLowerCase().includes(query) ||
+          item.specialty?.toLowerCase().includes(query) ||
+          item.date?.toLowerCase().includes(query) ||
+          item.time?.toLowerCase().includes(query) ||
+          item.bloodGroup?.toLowerCase().includes(query) ||
+          item.condition?.toLowerCase().includes(query) ||
+          item.additionalNotes?.toLowerCase().includes(query)
+        );
+      })
+      .sort((a, b) => {
+        const dateA = parseAppointmentDate(a.date) ?? a.date ?? '';
+        const dateB = parseAppointmentDate(b.date) ?? b.date ?? '';
+        const cmp = dateA.localeCompare(dateB);
+        if (cmp !== 0) return cmp;
+        return (a.time || '').localeCompare(b.time || '');
+      });
+  }, [
+    appointments,
+    filter,
+    approvedOnly,
+    dateFilter,
+    selectedDate,
+    search,
+    todayISO,
+    tomorrowISO,
+    next7ISO,
+  ]);
+
+  const filteredApprovedCount = useMemo(
+    () => filtered.filter((a) => a.status === 'confirmed').length,
+    [filtered]
+  );
+
+  const totalFilteredFee = useMemo(
+    () => filtered.reduce((acc, curr) => acc + (curr.fee || 0), 0),
+    [filtered]
+  );
 
   const notifyViaWhatsApp = (appointment: Appointment) => {
     sendWhatsAppNotification({
@@ -111,13 +345,20 @@ export default function AdminAppointmentsScreen() {
   };
 
   const changeStatus = (appointment: Appointment, status: AppointmentStatus) => {
+    const isAbsent = status === 'absent';
+    const alertTitle = isAbsent ? 'Mark Patient Absent' : 'Update appointment';
+    const alertMessage = isAbsent
+      ? `Mark ${appointment.patientName || 'Patient'} as absent for scheduled consultation with Dr. ${appointment.doctorName} at ${appointment.time}?`
+      : `Change appointment for ${appointment.patientName || 'Patient'} to ${status}?`;
+
     Alert.alert(
-      'Update appointment',
-      `Change appointment for ${appointment.patientName || 'Patient'} to ${status}?`,
+      alertTitle,
+      alertMessage,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Confirm',
+          text: isAbsent ? 'Mark Absent' : 'Confirm',
+          style: isAbsent ? 'destructive' : 'default',
           onPress: () => {
             updateStatus(appointment.id, status);
 
@@ -233,9 +474,25 @@ export default function AdminAppointmentsScreen() {
         </View>
       </View>
 
-      <View style={styles.summary}>
-        <Text style={styles.summaryNumber}>{appointments.length}</Text>
-        <Text style={styles.summaryLabel}>Total appointments</Text>
+      <View style={styles.summaryGrid}>
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryNumber}>{appointments.length}</Text>
+          <Text style={styles.summaryLabel}>Total</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryNumber, { color: '#0F766E' }]}>
+            {totalApprovedCount}
+          </Text>
+          <Text style={styles.summaryLabel}>Approved</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryNumber, { color: '#2563EB' }]}>
+            {dateCounts.today}
+          </Text>
+          <Text style={styles.summaryLabel}>Today</Text>
+        </View>
       </View>
 
       {/* Search Bar */}
@@ -244,7 +501,7 @@ export default function AdminAppointmentsScreen() {
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Search patient, doctor, serial, phone..."
+          placeholder="Search patient, doctor, serial, date..."
           placeholderTextColor="#94A3B8"
           style={styles.searchInput}
           autoCapitalize="none"
@@ -256,38 +513,110 @@ export default function AdminAppointmentsScreen() {
         )}
       </View>
 
-      {/* Visible Horizontal Filter Chips Bar */}
-      <View style={styles.filterSection}>
+      {/* Approved Appointments Only Quick Switch */}
+      <Pressable
+        style={[
+          styles.approvedToggleCard,
+          approvedOnly && styles.approvedToggleCardActive,
+        ]}
+        onPress={() => setApprovedOnly((prev) => !prev)}
+      >
+        <View style={styles.approvedToggleLeft}>
+          <View
+            style={[
+              styles.approvedToggleIconBox,
+              approvedOnly && styles.approvedToggleIconBoxActive,
+            ]}
+          >
+            <Ionicons
+              name={
+                approvedOnly ? 'checkmark-circle' : 'checkmark-circle-outline'
+              }
+              size={18}
+              color={approvedOnly ? '#FFFFFF' : '#0F766E'}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={[
+                styles.approvedToggleTitle,
+                approvedOnly && styles.approvedToggleTitleActive,
+              ]}
+            >
+              Approved Appointments Only
+            </Text>
+            <Text
+              style={[
+                styles.approvedToggleSubtitle,
+                approvedOnly && styles.approvedToggleSubtitleActive,
+              ]}
+            >
+              {approvedOnly
+                ? `Active: Viewing ${filteredApprovedCount} approved doctor visits`
+                : 'Tap to filter for only confirmed/approved appointments'}
+            </Text>
+          </View>
+        </View>
+        <View
+          style={[
+            styles.approvedTogglePill,
+            approvedOnly && styles.approvedTogglePillActive,
+          ]}
+        >
+          <Text
+            style={[
+              styles.approvedTogglePillText,
+              approvedOnly && styles.approvedTogglePillTextActive,
+            ]}
+          >
+            {approvedOnly ? 'ON' : 'OFF'}
+          </Text>
+        </View>
+      </Pressable>
+
+      {/* Date-Wise Filter Section */}
+      <View style={styles.dateFilterSection}>
+        <View style={styles.filterSectionHeader}>
+          <Ionicons name="calendar-outline" size={14} color="#0F766E" />
+          <Text style={styles.filterSectionTitle}>Filter by Date</Text>
+        </View>
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterRow}
         >
-          {FILTERS.map((item) => {
-            const isSelected = filter === item;
-            const count =
-              item === 'all'
-                ? appointments.length
-                : appointments.filter((a) => a.status === item).length;
+          {DATE_FILTERS.map((item) => {
+            const isSelected = dateFilter === item.id;
+            const count = dateCounts[item.id as keyof typeof dateCounts] ?? 0;
 
             return (
               <Pressable
-                key={item}
-                onPress={() => setFilter(item)}
+                key={item.id}
+                onPress={() => {
+                  setDateFilter(item.id);
+                  if (item.id !== 'custom') {
+                    setCalendarVisible(false);
+                    setSelectedDate(null);
+                  }
+                }}
                 style={[
                   styles.filterChip,
                   isSelected && styles.filterChipSelected,
                 ]}
               >
+                <Ionicons
+                  name={item.icon}
+                  size={14}
+                  color={isSelected ? '#FFFFFF' : '#475569'}
+                />
                 <Text
                   style={[
                     styles.filterChipText,
                     isSelected && styles.filterChipTextSelected,
                   ]}
                 >
-                  {item === 'all'
-                    ? 'All'
-                    : item.charAt(0).toUpperCase() + item.slice(1)}
+                  {item.label}
                 </Text>
                 <View
                   style={[
@@ -307,8 +636,180 @@ export default function AdminAppointmentsScreen() {
               </Pressable>
             );
           })}
+
+          {/* Pick Any Date / Calendar Option */}
+          <Pressable
+            onPress={() => {
+              setDateFilter('custom');
+              setCalendarVisible((prev) => !prev);
+            }}
+            style={[
+              styles.filterChip,
+              dateFilter === 'custom' && styles.filterChipSelected,
+            ]}
+          >
+            <Ionicons
+              name="calendar"
+              size={14}
+              color={dateFilter === 'custom' ? '#FFFFFF' : '#0F766E'}
+            />
+            <Text
+              style={[
+                styles.filterChipText,
+                dateFilter === 'custom' && styles.filterChipTextSelected,
+              ]}
+            >
+              {selectedDate ? formatDisplayDate(selectedDate) : 'Pick Date'}
+            </Text>
+            {selectedDate && (
+              <View
+                style={[
+                  styles.filterCountBadge,
+                  styles.filterCountBadgeSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterCountText,
+                    styles.filterCountTextSelected,
+                  ]}
+                >
+                  {dateCounts.custom}
+                </Text>
+              </View>
+            )}
+          </Pressable>
         </ScrollView>
+
+        {/* Dropdown Calendar Modal / View */}
+        {calendarVisible && (
+          <View style={styles.calendarCard}>
+            <View style={styles.calendarCardHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="calendar-sharp" size={16} color="#0F766E" />
+                <Text style={styles.calendarCardTitle}>
+                  Select Date to View Schedule
+                </Text>
+              </View>
+              <Pressable onPress={() => setCalendarVisible(false)}>
+                <Ionicons name="close-circle" size={20} color="#64748B" />
+              </Pressable>
+            </View>
+            <Calendar
+              onDayPress={(day: DateData) => {
+                setSelectedDate(day.dateString);
+                setDateFilter('custom');
+                setCalendarVisible(false);
+              }}
+              markedDates={markedDates}
+              theme={{
+                todayTextColor: '#0F766E',
+                selectedDayBackgroundColor: '#0F766E',
+                selectedDayTextColor: '#FFFFFF',
+                arrowColor: '#0F766E',
+                dotColor: '#0F766E',
+              }}
+            />
+          </View>
+        )}
       </View>
+
+      {/* Active Date Focus Banner */}
+      {dateFilter !== 'all' && (
+        <View style={styles.dateBanner}>
+          <View style={styles.dateBannerContent}>
+            <View style={styles.dateBannerIconBox}>
+              <Ionicons name="calendar-sharp" size={16} color="#0F766E" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.dateBannerHeading}>
+                {dateFilter === 'today'
+                  ? `Today's Schedule (${formatDisplayDate(todayISO)})`
+                  : dateFilter === 'tomorrow'
+                  ? `Tomorrow's Schedule (${formatDisplayDate(tomorrowISO)})`
+                  : dateFilter === 'next7'
+                  ? 'Next 7 Days Schedule'
+                  : selectedDate
+                  ? `Schedule for ${formatDisplayDate(selectedDate)}`
+                  : 'Selected Date Schedule'}
+              </Text>
+              <Text style={styles.dateBannerSub}>
+                {filtered.length} appointment{filtered.length === 1 ? '' : 's'} (
+                {filteredApprovedCount} approved) • ৳{totalFilteredFee} fees
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.clearDateFilterBtn}
+              onPress={() => {
+                setDateFilter('all');
+                setSelectedDate(null);
+                setCalendarVisible(false);
+              }}
+            >
+              <Ionicons name="close-circle-outline" size={14} color="#64748B" />
+              <Text style={styles.clearDateFilterText}>All Dates</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Status Filter Chips (Only shown when not locked to Approved Only) */}
+      {!approvedOnly && (
+        <View style={styles.filterSection}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+          >
+            {FILTERS.map((item) => {
+              const isSelected = filter === item;
+              const count =
+                item === 'all'
+                  ? appointments.length
+                  : appointments.filter((a) => a.status === item).length;
+
+              return (
+                <Pressable
+                  key={item}
+                  onPress={() => setFilter(item)}
+                  style={[
+                    styles.filterChip,
+                    isSelected && styles.filterChipSelected,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      isSelected && styles.filterChipTextSelected,
+                    ]}
+                  >
+                    {item === 'all'
+                      ? 'All Statuses'
+                      : item === 'confirmed'
+                      ? 'Approved'
+                      : item.charAt(0).toUpperCase() + item.slice(1)}
+                  </Text>
+                  <View
+                    style={[
+                      styles.filterCountBadge,
+                      isSelected && styles.filterCountBadgeSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterCountText,
+                        isSelected && styles.filterCountTextSelected,
+                      ]}
+                    >
+                      {count}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       <FlatList
         data={filtered}
@@ -332,8 +833,25 @@ export default function AdminAppointmentsScreen() {
                   item.status === 'completed' && styles.completed,
                   item.status === 'rejected' && styles.rejected,
                   item.status === 'cancelled' && styles.cancelled,
+                  item.status === 'absent' && styles.absent,
                 ]}
               >
+                {item.status === 'confirmed' && (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={11}
+                    color="#0F766E"
+                    style={{ marginRight: 3 }}
+                  />
+                )}
+                {item.status === 'absent' && (
+                  <Ionicons
+                    name="person-remove-outline"
+                    size={11}
+                    color="#B91C1C"
+                    style={{ marginRight: 3 }}
+                  />
+                )}
                 <Text
                   style={[
                     styles.statusText,
@@ -341,9 +859,12 @@ export default function AdminAppointmentsScreen() {
                     item.status === 'completed' && styles.completedText,
                     item.status === 'rejected' && styles.rejectedText,
                     item.status === 'cancelled' && styles.cancelledText,
+                    item.status === 'absent' && styles.absentText,
                   ]}
                 >
-                  {item.status.toUpperCase()}
+                  {item.status === 'confirmed'
+                    ? 'APPROVED'
+                    : item.status.toUpperCase()}
                 </Text>
               </View>
             </View>
@@ -427,6 +948,40 @@ export default function AdminAppointmentsScreen() {
               <View style={styles.feeChip}>
                 <Text style={styles.feeChipText}>৳{item.fee}</Text>
               </View>
+              {item.paymentStatus === 'paid' ? (
+                <View
+                  style={[
+                    styles.feeChip,
+                    { backgroundColor: '#CCFBF1', borderColor: '#99F6E4' },
+                  ]}
+                >
+                  <Text style={[styles.feeChipText, { color: '#0F766E' }]}>
+                    Paid (Stripe)
+                  </Text>
+                </View>
+              ) : item.paymentStatus === 'pay_later' || item.paymentMethod === 'pay_later' ? (
+                <View
+                  style={[
+                    styles.feeChip,
+                    { backgroundColor: '#EDE9FE', borderColor: '#DDD6FE' },
+                  ]}
+                >
+                  <Text style={[styles.feeChipText, { color: '#6D28D9' }]}>
+                    Pay Later
+                  </Text>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.feeChip,
+                    { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' },
+                  ]}
+                >
+                  <Text style={[styles.feeChipText, { color: '#64748B' }]}>
+                    Pay at Clinic
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Medical Intake Details Box */}
@@ -507,35 +1062,98 @@ export default function AdminAppointmentsScreen() {
               </Text>
             </TouchableOpacity>
 
-            {(item.status === 'pending' || item.status === 'confirmed') && (
+            {(item.status === 'pending' ||
+              item.status === 'confirmed' ||
+              item.status === 'absent') && (
               <View style={styles.actions}>
-                {STATUS_ACTIONS.filter((action) =>
-                  item.status === 'pending'
-                    ? action.status !== 'completed'
-                    : action.status !== 'confirmed'
-                ).map((action) => (
-                  <Pressable
-                    key={action.status}
-                    style={[
-                      styles.actionButton,
-                      action.status === 'rejected'
-                        ? styles.rejectButton
-                        : action.status === 'completed'
-                          ? styles.completeButton
-                          : styles.confirmButton,
-                    ]}
-                    onPress={() => changeStatus(item, action.status)}
-                  >
-                    <Text
-                      style={[
-                        styles.actionText,
-                        action.status === 'rejected' && styles.rejectText,
-                      ]}
+                {item.status === 'pending' && (
+                  <>
+                    <Pressable
+                      style={[styles.actionButton, styles.confirmButton]}
+                      onPress={() => changeStatus(item, 'confirmed')}
                     >
-                      {action.label}
-                    </Text>
-                  </Pressable>
-                ))}
+                      <Text style={styles.actionText}>Confirm</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.actionButton, styles.rejectButton]}
+                      onPress={() => changeStatus(item, 'rejected')}
+                    >
+                      <Text style={[styles.actionText, styles.rejectText]}>
+                        Reject
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
+
+                {item.status === 'confirmed' && (
+                  <>
+                    <Pressable
+                      style={[styles.actionButton, styles.completeButton]}
+                      onPress={() => changeStatus(item, 'completed')}
+                    >
+                      <Text style={styles.actionText}>Complete</Text>
+                    </Pressable>
+
+                    {/* Absent option: activates when doctor's scheduled slot time arrives */}
+                    {isScheduleTimeReached(item.date, item.time) ? (
+                      <Pressable
+                        style={[styles.actionButton, styles.absentButton]}
+                        onPress={() => changeStatus(item, 'absent')}
+                      >
+                        <Ionicons
+                          name="person-remove-outline"
+                          size={13}
+                          color="#DC2626"
+                          style={{ marginRight: 3 }}
+                        />
+                        <Text style={styles.absentButtonText}>Mark Absent</Text>
+                      </Pressable>
+                    ) : (
+                      <View style={styles.schedulePendingPill}>
+                        <Ionicons
+                          name="time-outline"
+                          size={11}
+                          color="#64748B"
+                        />
+                        <Text style={styles.schedulePendingText}>
+                          Absent option unlocks at {item.time}
+                        </Text>
+                      </View>
+                    )}
+
+                    <Pressable
+                      style={[styles.actionButton, styles.rejectButton]}
+                      onPress={() => changeStatus(item, 'rejected')}
+                    >
+                      <Text style={[styles.actionText, styles.rejectText]}>
+                        Reject
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
+
+                {item.status === 'absent' && (
+                  <>
+                    <Pressable
+                      style={[styles.actionButton, styles.confirmButton]}
+                      onPress={() => changeStatus(item, 'confirmed')}
+                    >
+                      <Ionicons
+                        name="refresh-outline"
+                        size={13}
+                        color="#FFFFFF"
+                        style={{ marginRight: 3 }}
+                      />
+                      <Text style={styles.actionText}>Re-Confirm</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.actionButton, styles.completeButton]}
+                      onPress={() => changeStatus(item, 'completed')}
+                    >
+                      <Text style={styles.actionText}>Complete</Text>
+                    </Pressable>
+                  </>
+                )}
               </View>
             )}
           </View>
@@ -670,19 +1288,36 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   title: { fontSize: 22, fontWeight: '800', color: '#0F172A' },
   subtitle: { color: '#64748B', fontSize: 12, marginTop: 2 },
-  summary: {
+  summaryGrid: {
     marginHorizontal: 16,
     marginTop: 14,
-    marginBottom: 8,
-    padding: 14,
-    borderRadius: 12,
+    marginBottom: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-around',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
   },
+  summaryItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#E2E8F0',
+  },
+  summaryNumber: { fontSize: 22, fontWeight: '800', color: '#0F766E' },
+  summaryLabel: { color: '#64748B', fontSize: 11, fontWeight: '700', marginTop: 1 },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -707,8 +1342,168 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     paddingVertical: 0,
   },
-  summaryNumber: { fontSize: 26, fontWeight: '800', color: '#0F766E' },
-  summaryLabel: { color: '#64748B', fontSize: 13, fontWeight: '600' },
+  approvedToggleCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1.5,
+    borderColor: '#CCFBF1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  approvedToggleCardActive: {
+    backgroundColor: '#0F766E',
+    borderColor: '#0F766E',
+  },
+  approvedToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  approvedToggleIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  approvedToggleIconBoxActive: {
+    backgroundColor: '#115E59',
+  },
+  approvedToggleTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  approvedToggleTitleActive: {
+    color: '#FFFFFF',
+  },
+  approvedToggleSubtitle: {
+    fontSize: 11,
+    color: '#134E4A',
+    marginTop: 1,
+  },
+  approvedToggleSubtitleActive: {
+    color: '#CCFBF1',
+  },
+  approvedTogglePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#CCFBF1',
+  },
+  approvedTogglePillActive: {
+    backgroundColor: '#115E59',
+  },
+  approvedTogglePillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  approvedTogglePillTextActive: {
+    color: '#FFFFFF',
+  },
+  dateFilterSection: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    paddingVertical: 10,
+    marginBottom: 6,
+  },
+  filterSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  filterSectionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0F766E',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  calendarCard: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  calendarCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 6,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    marginBottom: 6,
+  },
+  calendarCardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  dateBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    backgroundColor: '#CCFBF1',
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    padding: 10,
+  },
+  dateBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dateBannerIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateBannerHeading: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  dateBannerSub: {
+    fontSize: 11,
+    color: '#115E59',
+    marginTop: 1,
+  },
+  clearDateFilterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  clearDateFilterText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+  },
   filterSection: {
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -799,11 +1594,13 @@ const styles = StyleSheet.create({
   completed: { backgroundColor: '#D1FAE5', borderColor: '#A7F3D0' },
   rejected: { backgroundColor: '#FEE2E2', borderColor: '#FECACA' },
   cancelled: { backgroundColor: '#E2E8F0', borderColor: '#CBD5E1' },
+  absent: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
   statusText: { fontSize: 10, fontWeight: '800', color: '#92400E' },
   confirmedText: { color: '#1E40AF' },
   completedText: { color: '#065F46' },
   rejectedText: { color: '#DC2626' },
   cancelledText: { color: '#64748B' },
+  absentText: { color: '#B91C1C' },
   serialManagerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1042,6 +1839,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF7F7',
     borderWidth: 1,
     borderColor: '#FECACA',
+  },
+  absentButton: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  absentButtonText: {
+    color: '#DC2626',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  schedulePendingPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  schedulePendingText: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
   },
   actionText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   rejectText: { color: '#DC2626' },

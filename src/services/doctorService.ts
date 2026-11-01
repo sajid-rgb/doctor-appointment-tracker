@@ -19,6 +19,11 @@ import { withTimeout } from './authService';
 
 export type DoctorApprovalStatus = 'pending' | 'approved' | 'rejected';
 
+export type DoctorSubscriptionTier =
+  | 'doctor_starter'
+  | 'doctor_pro'
+  | 'doctor_elite';
+
 export type DoctorProfile = {
   id: string;
   name: string;
@@ -34,6 +39,9 @@ export type DoctorProfile = {
   approvalStatus: DoctorApprovalStatus;
   createdAt: string;
   availability?: AvailabilitySettings;
+  subscriptionTier?: DoctorSubscriptionTier;
+  subscriptionStatus?: 'active' | 'cancelled' | 'expired';
+  isFeatured?: boolean;
 };
 
 export type NewDoctorProfile = Omit<
@@ -85,6 +93,13 @@ function normalizeDoctorDoc(id: string, data: any): DoctorProfile {
       (data?.approvalStatus as DoctorApprovalStatus) || 'pending',
     createdAt: data?.createdAt || new Date().toISOString(),
     availability: data?.availability ?? DEFAULT_AVAILABILITY,
+    subscriptionTier: data?.subscriptionTier,
+    subscriptionStatus: data?.subscriptionStatus,
+    isFeatured: Boolean(
+      data?.isFeatured ||
+        data?.subscriptionTier === 'doctor_pro' ||
+        data?.subscriptionTier === 'doctor_elite'
+    ),
   };
 }
 

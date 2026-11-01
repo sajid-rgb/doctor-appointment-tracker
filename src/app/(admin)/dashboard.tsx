@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { ApiSyncIndicator } from '../../components/ApiSyncIndicator';
@@ -53,6 +54,32 @@ export default function AdminDashboard() {
     (doctor) => doctor.approvalStatus === 'pending'
   ).length;
 
+  const todayISO = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  const tomorrowISO = useMemo(() => {
+    const d = new Date(Date.now() + 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  const todayApprovedCount = useMemo(() => {
+    return appointments.filter(
+      (a) => a.status === 'confirmed' && a.date === todayISO
+    ).length;
+  }, [appointments, todayISO]);
+
+  const tomorrowApprovedCount = useMemo(() => {
+    return appointments.filter(
+      (a) => a.status === 'confirmed' && a.date === tomorrowISO
+    ).length;
+  }, [appointments, tomorrowISO]);
+
+  const totalApprovedCount = useMemo(() => {
+    return appointments.filter((a) => a.status === 'confirmed').length;
+  }, [appointments]);
+
   const handleLogout = () => {
     logout();
     router.replace('/login');
@@ -81,11 +108,11 @@ export default function AdminDashboard() {
       background: '#D1FAE5',
     },
     {
-      title: 'Appointments',
-      value: appointments.length,
-      icon: 'calendar-outline' as const,
-      color: '#7C3AED',
-      background: '#EDE9FE',
+      title: 'Approved Visits',
+      value: totalApprovedCount,
+      icon: 'checkmark-circle-outline' as const,
+      color: '#0F766E',
+      background: '#CCFBF1',
     },
   ];
 
@@ -144,6 +171,111 @@ export default function AdminDashboard() {
               <Text style={styles.statTitle}>{item.title}</Text>
             </View>
           ))}
+        </View>
+
+        <Text style={styles.sectionTitle}>Date-Wise Approved Schedule</Text>
+
+        <View style={styles.scheduleWidgetCard}>
+          <View style={styles.scheduleWidgetHeader}>
+            <View style={styles.scheduleWidgetIcon}>
+              <Ionicons name="calendar-sharp" size={20} color="#0F766E" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.scheduleWidgetTitle}>
+                Live Clinical Schedule
+              </Text>
+              <Text style={styles.scheduleWidgetSubtitle}>
+                View all approved doctor visits filtered by date
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.scheduleGrid}>
+            <TouchableOpacity
+              style={styles.scheduleCard}
+              activeOpacity={0.8}
+              onPress={() =>
+                router.push({
+                  pathname: '/appointments',
+                  params: {
+                    dateFilter: 'today',
+                    status: 'confirmed',
+                    approvedOnly: 'true',
+                  },
+                })
+              }
+            >
+              <View style={styles.scheduleCardTop}>
+                <Text style={styles.scheduleCardTag}>TODAY</Text>
+                <View style={styles.scheduleCountPill}>
+                  <Text style={styles.scheduleCountText}>
+                    {todayApprovedCount}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.scheduleCardTitle}>Today's Schedule</Text>
+              <Text style={styles.scheduleCardSub}>
+                {todayApprovedCount === 0
+                  ? 'No approved visits today'
+                  : `${todayApprovedCount} approved visit${todayApprovedCount === 1 ? '' : 's'}`}
+              </Text>
+              <View style={styles.scheduleActionRow}>
+                <Text style={styles.scheduleActionText}>View Today's List</Text>
+                <Ionicons name="arrow-forward" size={13} color="#0F766E" />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.scheduleCard,
+                { borderColor: '#BFDBFE', backgroundColor: '#F0F9FF' },
+              ]}
+              activeOpacity={0.8}
+              onPress={() =>
+                router.push({
+                  pathname: '/appointments',
+                  params: {
+                    dateFilter: 'tomorrow',
+                    status: 'confirmed',
+                    approvedOnly: 'true',
+                  },
+                })
+              }
+            >
+              <View style={styles.scheduleCardTop}>
+                <Text style={[styles.scheduleCardTag, { color: '#1E40AF' }]}>
+                  NEXT DAY
+                </Text>
+                <View
+                  style={[
+                    styles.scheduleCountPill,
+                    { backgroundColor: '#DBEAFE' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.scheduleCountText,
+                      { color: '#1E40AF' },
+                    ]}
+                  >
+                    {tomorrowApprovedCount}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.scheduleCardTitle}>Tomorrow's Schedule</Text>
+              <Text style={styles.scheduleCardSub}>
+                {tomorrowApprovedCount === 0
+                  ? 'No approved visits scheduled'
+                  : `${tomorrowApprovedCount} approved visit${tomorrowApprovedCount === 1 ? '' : 's'}`}
+              </Text>
+              <View style={styles.scheduleActionRow}>
+                <Text style={[styles.scheduleActionText, { color: '#2563EB' }]}>
+                  View Next Day
+                </Text>
+                <Ionicons name="arrow-forward" size={13} color="#2563EB" />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Text style={styles.sectionTitle}>Management</Text>
@@ -346,6 +478,100 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     marginTop: 6,
+  },
+  scheduleWidgetCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+    marginBottom: 24,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  scheduleWidgetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  scheduleWidgetIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scheduleWidgetTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  scheduleWidgetSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  scheduleGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  scheduleCard: {
+    flex: 1,
+    backgroundColor: '#F0FDFA',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+  },
+  scheduleCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  scheduleCardTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0F766E',
+    letterSpacing: 0.5,
+  },
+  scheduleCountPill: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  scheduleCountText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0F766E',
+  },
+  scheduleCardTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  scheduleCardSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginBottom: 10,
+  },
+  scheduleActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 'auto',
+  },
+  scheduleActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F766E',
   },
   footer: {
     textAlign: 'center',
