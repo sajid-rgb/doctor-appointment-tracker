@@ -16,6 +16,7 @@ import {
 import type {
   Appointment,
   AppointmentStatus,
+  UploadedPrescriptionFile,
 } from '../../store/appointmentStore';
 import { useAppointmentStore } from '../../store/appointmentStore';
 import { useAuthStore } from '../../store/authStore';
@@ -24,6 +25,7 @@ import { isSlotInPast } from '../../constants/availability';
 import { useNotificationStore } from '../../store/notificationStore';
 import { notifyPatientAppointmentStatus } from '../../utils/notifications';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
+import { FileViewerModal } from '../../components/FileViewerModal';
 
 function formatFileSize(bytes?: number): string {
   if (!bytes) return '';
@@ -45,6 +47,7 @@ export default function DoctorAppointmentsScreen() {
   const doctors = useDoctorStore((state) => state.doctors);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [viewingFile, setViewingFile] = useState<UploadedPrescriptionFile | null>(null);
 
   useEffect(() => {
     fetchAppointments();
@@ -153,8 +156,9 @@ export default function DoctorAppointmentsScreen() {
   }
 
   return (
-    <FlatList
-      style={styles.screen}
+    <View style={styles.screen}>
+      <FlatList
+        style={styles.screen}
       contentContainerStyle={styles.list}
       data={myAppointments}
       keyExtractor={(item) => item.id}
@@ -309,11 +313,7 @@ export default function DoctorAppointmentsScreen() {
                     <TouchableOpacity
                       key={`${file.name}-${idx}`}
                       activeOpacity={0.7}
-                      onPress={() =>
-                        Linking.openURL(file.uri).catch(() =>
-                          Alert.alert('Preview', `File: ${file.name}\n${file.uri}`)
-                        )
-                      }
+                      onPress={() => setViewingFile(file)}
                       style={styles.fileChip}
                     >
                       <Ionicons
@@ -329,7 +329,10 @@ export default function DoctorAppointmentsScreen() {
                           {formatFileSize(file.size)}
                         </Text>
                       ) : null}
-                      <Ionicons name="open-outline" size={12} color="#0F766E" />
+                      <View style={styles.fileOpenTag}>
+                        <Ionicons name="open-outline" size={11} color="#0F766E" />
+                        <Text style={styles.fileOpenTagText}>Open</Text>
+                      </View>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -361,17 +364,6 @@ export default function DoctorAppointmentsScreen() {
               {item.paymentStatus === 'paid' ? (
                 <View style={styles.paidChip}>
                   <Text style={styles.paidChipText}>Paid (Stripe)</Text>
-                </View>
-              ) : item.paymentStatus === 'pay_later' || item.paymentMethod === 'pay_later' ? (
-                <View
-                  style={[
-                    styles.paidChip,
-                    { backgroundColor: '#EDE9FE', borderColor: '#DDD6FE' },
-                  ]}
-                >
-                  <Text style={[styles.paidChipText, { color: '#6D28D9' }]}>
-                    Pay Later
-                  </Text>
                 </View>
               ) : (
                 <View style={styles.unpaidChip}>
@@ -462,7 +454,14 @@ export default function DoctorAppointmentsScreen() {
         </View>
       )}
     />
-  );
+
+    <FileViewerModal
+      visible={Boolean(viewingFile)}
+      file={viewingFile}
+      onClose={() => setViewingFile(null)}
+    />
+  </View>
+);
 }
 
 const styles = StyleSheet.create({
@@ -745,6 +744,21 @@ const styles = StyleSheet.create({
   fileChipSize: {
     fontSize: 10,
     color: '#64748B',
+  },
+  fileOpenTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
+    marginLeft: 2,
+  },
+  fileOpenTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0F766E',
   },
   whatsappSlipButton: {
     flexDirection: 'row',

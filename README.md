@@ -1,5 +1,5 @@
 # CarePoint — Digital Doctor Appointment Management System
-**React Native | Expo | TypeScript | Firebase | Stripe**
+**React Native | Expo | TypeScript | Firebase | Zustand | Stripe**
 
 > **Developed a cross-platform digital doctor appointment management application using React Native and Expo, with Firebase Cloud Firestore for data management. The application features three role-based panels (Admin, Doctor, and Patient), appointment scheduling, doctor availability management, payment simulation, attendance tracking, and automated notifications.**
 
@@ -58,6 +58,7 @@ To build a centralized digital healthcare platform that simplifies doctor-patien
 ### 5. Technologies, Integrations & Testing
 - **React Native & Expo:** Cross-platform mobile application development.
 - **TypeScript:** Type-safe application development.
+- **Zustand:** Centralized global state management (auth, appointments, doctor queues, and subscriptions).
 - **Expo Router:** File-based navigation and routing.
 - **Firebase Cloud Firestore:** Cloud database and real-time data management.
 - **Expo Notifications:** Appointment reminders and notifications.
@@ -70,8 +71,8 @@ To build a centralized digital healthcare platform that simplifies doctor-patien
 
 ## 📥 Download Standalone Android APK
 
-- **Direct APK Download Link:** [Download CarePoint APK (v1.0.0)](https://expo.dev/artifacts/eas/yba9mAsdWza8itP9ZRFrobkS77EQRaK1mwOkD9Am5p0.apk)
-- **EAS Build Dashboard:** [EAS Build Details](https://expo.dev/accounts/sajid-chowdhury/projects/CarePoint/builds/f266c86a-83e3-4b5a-9859-f02a703dc8e2)
+- **Direct APK Download Link:** [Download CarePoint APK (v1.0.0)](https://expo.dev/artifacts/eas/o_YB7ysE-IZo219QyMjm7nJtZH3dTmthtqmaP28v3Lw.apk)
+- **EAS Build Dashboard:** [EAS Build Details](https://expo.dev/accounts/sajid-chowdhury/projects/CarePoint/builds/10ac8abb-30bb-4684-8505-a05d87a61d75)
 
 ---
 

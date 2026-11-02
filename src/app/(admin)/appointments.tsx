@@ -20,8 +20,10 @@ import {
   AppointmentStatus,
   generateUniqueSerialNumber,
   isSerialNumberTaken,
+  UploadedPrescriptionFile,
   useAppointmentStore,
 } from '../../store/appointmentStore';
+import { FileViewerModal } from '../../components/FileViewerModal';
 import { isSlotInPast } from '../../constants/availability';
 import { notifyPatientAppointmentStatus } from '../../utils/notifications';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
@@ -180,6 +182,8 @@ export default function AdminAppointmentsScreen() {
     initialStatus === 'confirmed' || params.approvedOnly === 'true'
   );
   const [search, setSearch] = useState('');
+  const [viewingFile, setViewingFile] =
+    useState<UploadedPrescriptionFile | null>(null);
 
   // Serial Management Modal State
   const [editingAppointment, setEditingAppointment] =
@@ -959,17 +963,6 @@ export default function AdminAppointmentsScreen() {
                     Paid (Stripe)
                   </Text>
                 </View>
-              ) : item.paymentStatus === 'pay_later' || item.paymentMethod === 'pay_later' ? (
-                <View
-                  style={[
-                    styles.feeChip,
-                    { backgroundColor: '#EDE9FE', borderColor: '#DDD6FE' },
-                  ]}
-                >
-                  <Text style={[styles.feeChipText, { color: '#6D28D9' }]}>
-                    Pay Later
-                  </Text>
-                </View>
               ) : (
                 <View
                   style={[
@@ -1017,11 +1010,7 @@ export default function AdminAppointmentsScreen() {
                         <TouchableOpacity
                           key={`${file.name}-${idx}`}
                           activeOpacity={0.7}
-                          onPress={() =>
-                            Linking.openURL(file.uri).catch(() =>
-                              Alert.alert('File', `${file.name}\n${file.uri}`)
-                            )
-                          }
+                          onPress={() => setViewingFile(file)}
                           style={styles.adminFileChip}
                         >
                           <Ionicons
@@ -1037,11 +1026,14 @@ export default function AdminAppointmentsScreen() {
                               {formatFileSize(file.size)}
                             </Text>
                           ) : null}
-                          <Ionicons
-                            name="open-outline"
-                            size={12}
-                            color="#64748B"
-                          />
+                          <View style={styles.fileOpenTag}>
+                            <Ionicons
+                              name="eye-outline"
+                              size={11}
+                              color="#0F766E"
+                            />
+                            <Text style={styles.fileOpenTagText}>Open</Text>
+                          </View>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -1260,6 +1252,12 @@ export default function AdminAppointmentsScreen() {
           </View>
         </Modal>
       )}
+
+      <FileViewerModal
+        visible={Boolean(viewingFile)}
+        file={viewingFile}
+        onClose={() => setViewingFile(null)}
+      />
     </View>
   );
 }
@@ -1807,6 +1805,21 @@ const styles = StyleSheet.create({
   adminFileSize: {
     fontSize: 10,
     color: '#94A3B8',
+  },
+  fileOpenTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 2,
+  },
+  fileOpenTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0F766E',
   },
   whatsappButton: {
     flexDirection: 'row',

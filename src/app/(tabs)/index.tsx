@@ -236,19 +236,6 @@ export default function DashboardScreen() {
                       <Text style={styles.miniPaidText}>Paid</Text>
                     </View>
                   )}
-                  {(item.paymentStatus === 'pay_later' ||
-                    item.paymentMethod === 'pay_later') && (
-                    <View
-                      style={[
-                        styles.miniPaidBadge,
-                        { backgroundColor: '#EDE9FE' },
-                      ]}
-                    >
-                      <Text style={[styles.miniPaidText, { color: '#6D28D9' }]}>
-                        Pay Later
-                      </Text>
-                    </View>
-                  )}
                 </View>
               </View>
 

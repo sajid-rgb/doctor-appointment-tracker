@@ -31,6 +31,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useDoctorStore } from '../../store/doctorStore';
 import { useSubscriptionStore } from '../../store/subscriptionStore';
 import { StripePaymentModal } from '../../components/StripePaymentModal';
+import { FileViewerModal } from '../../components/FileViewerModal';
 import { notifyDoctorNewAppointment } from '../../utils/notifications';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
 
@@ -227,10 +228,9 @@ export default function BookAppointmentScreen() {
   }, [getDiscountedFee, baseFee]);
   const discountAmount = Math.max(0, baseFee - finalFee);
 
-  const [paymentMethod, setPaymentMethod] = useState<
-    'cash' | 'stripe' | 'pay_later'
-  >('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'stripe'>('cash');
   const [showStripeModal, setShowStripeModal] = useState(false);
+  const [viewingFile, setViewingFile] = useState<UploadedPrescriptionFile | null>(null);
 
   const handlePickDocument = async () => {
     try {
@@ -444,8 +444,8 @@ export default function BookAppointmentScreen() {
     };
 
     const proceedWithBooking = async (payment: {
-      method: 'cash' | 'stripe' | 'pay_later';
-      status: 'pending' | 'paid' | 'pay_later';
+      method: 'cash' | 'stripe';
+      status: 'pending' | 'paid';
       transactionId?: string;
     }) => {
       const ageNum = validateIntakeForm();
@@ -503,8 +503,6 @@ export default function BookAppointmentScreen() {
         const paymentNotice =
           payment.method === 'stripe'
             ? `Payment: Paid ৳${finalFee} online via Stripe (Receipt: ${payment.transactionId?.slice(0, 14)}...)`
-            : payment.method === 'pay_later'
-            ? `Payment: Pay Later (৳${finalFee} due on or before appointment)`
             : `Payment: Pay ৳${finalFee} in cash at clinic reception`;
 
         Alert.alert(
@@ -547,8 +545,6 @@ export default function BookAppointmentScreen() {
 
       if (paymentMethod === 'stripe' && finalFee > 0) {
         setShowStripeModal(true);
-      } else if (paymentMethod === 'pay_later') {
-        await proceedWithBooking({ method: 'pay_later', status: 'pay_later' });
       } else {
         await proceedWithBooking({ method: 'cash', status: 'pending' });
       }
@@ -1018,22 +1014,60 @@ export default function BookAppointmentScreen() {
 
                     return (
                       <View key={`${file.name}-${idx}`} style={styles.fileItem}>
-                        <View style={styles.fileIconBox}>
-                          <Ionicons
-                            name={isImg ? 'image-outline' : 'document-text-outline'}
-                            size={18}
-                            color="#0F766E"
-                          />
-                        </View>
-                        <View style={styles.fileInfo}>
-                          <Text style={styles.fileName} numberOfLines={1}>
-                            {file.name}
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => setViewingFile(file)}
+                          style={{
+                            flex: 1,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 10,
+                          }}
+                        >
+                          <View style={styles.fileIconBox}>
+                            <Ionicons
+                              name={isImg ? 'image-outline' : 'document-text-outline'}
+                              size={18}
+                              color="#0F766E"
+                            />
+                          </View>
+                          <View style={styles.fileInfo}>
+                            <Text style={styles.fileName} numberOfLines={1}>
+                              {file.name}
+                            </Text>
+                            <Text style={styles.fileMeta}>
+                              {isImg ? 'Image' : 'Document'}
+                              {file.size ? ` • ${formatFileSize(file.size)}` : ''}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => setViewingFile(file)}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            paddingHorizontal: 8,
+                            paddingVertical: 5,
+                            borderRadius: 6,
+                            backgroundColor: '#CCFBF1',
+                            marginRight: 6,
+                          }}
+                        >
+                          <Ionicons name="open-outline" size={13} color="#0F766E" />
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: '700',
+                              color: '#0F766E',
+                            }}
+                          >
+                            Open
                           </Text>
-                          <Text style={styles.fileMeta}>
-                            {isImg ? 'Image' : 'Document'}
-                            {file.size ? ` • ${formatFileSize(file.size)}` : ''}
-                          </Text>
-                        </View>
+                        </TouchableOpacity>
+
                         <TouchableOpacity
                           onPress={() => handleRemoveFile(idx)}
                           style={styles.fileDeleteButton}
@@ -1317,44 +1351,6 @@ export default function BookAppointmentScreen() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={[
-                styles.paymentOption,
-                paymentMethod === 'pay_later' && styles.paymentOptionSelected,
-              ]}
-              onPress={() => setPaymentMethod('pay_later')}
-            >
-              <View
-                style={[
-                  styles.paymentRadio,
-                  paymentMethod === 'pay_later' && styles.paymentRadioActive,
-                ]}
-              >
-                {paymentMethod === 'pay_later' && (
-                  <View style={styles.paymentRadioInner} />
-                )}
-              </View>
-              <View
-                style={[
-                  styles.paymentIconBox,
-                  { backgroundColor: '#EDE9FE' },
-                ]}
-              >
-                <Ionicons name="time-outline" size={20} color="#7C3AED" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={styles.paymentOptionTitle}>I Will Pay Later</Text>
-                  <View style={[styles.stripeBadge, { backgroundColor: '#EDE9FE' }]}>
-                    <Text style={[styles.stripeBadgeText, { color: '#6D28D9' }]}>Flexible</Text>
-                  </View>
-                </View>
-                <Text style={styles.paymentOptionDesc}>
-                  Book instantly now and settle the ৳{finalFee} fee later before consultation.
-                </Text>
-              </View>
-            </TouchableOpacity>
           </View>
 
           <Pressable
@@ -1385,19 +1381,11 @@ export default function BookAppointmentScreen() {
                 ? 'Submitting...'
                 : paymentMethod === 'stripe'
                 ? `Pay Online & Confirm (৳${finalFee})`
-                : paymentMethod === 'pay_later'
-                ? `Confirm Booking (Pay ৳${finalFee} Later)`
                 : `Confirm Appointment (Pay ৳${finalFee} at Clinic)`}
             </Text>
             {!isBooking && (
               <Ionicons
-                name={
-                  paymentMethod === 'stripe'
-                    ? 'card-outline'
-                    : paymentMethod === 'pay_later'
-                    ? 'time-outline'
-                    : 'arrow-forward'
-                }
+                name={paymentMethod === 'stripe' ? 'card-outline' : 'arrow-forward'}
                 size={18}
                 color="#FFFFFF"
               />
@@ -1425,6 +1413,13 @@ export default function BookAppointmentScreen() {
             subtitle={`${doctor.specialty} Consultation`}
             customerName={user.name}
             customerEmail={user.email}
+          />
+
+          {/* Prescription Document / Image Viewer Modal */}
+          <FileViewerModal
+            visible={Boolean(viewingFile)}
+            file={viewingFile}
+            onClose={() => setViewingFile(null)}
           />
         </>
       )}

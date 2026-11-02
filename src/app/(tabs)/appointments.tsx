@@ -20,9 +20,11 @@ import {
   useAppointmentStore,
   type Appointment,
   type AppointmentStatus,
+  type UploadedPrescriptionFile,
 } from '../../store/appointmentStore';
 import { DoctorAvatar } from '../../components/DoctorAvatar';
 import { ApiSyncIndicator } from '../../components/ApiSyncIndicator';
+import { FileViewerModal } from '../../components/FileViewerModal';
 import { useDoctorStore } from '../../store/doctorStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import { sendWhatsAppNotification } from '../../utils/whatsapp';
@@ -206,6 +208,8 @@ export default function PatientAppointmentsScreen() {
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [viewingFile, setViewingFile] =
+    useState<UploadedPrescriptionFile | null>(null);
 
   const [calendarVisible, setCalendarVisible] = useState(false);
 
@@ -417,11 +421,7 @@ export default function PatientAppointmentsScreen() {
                     <TouchableOpacity
                       key={`${f.name}-${i}`}
                       activeOpacity={0.7}
-                      onPress={() =>
-                        Linking.openURL(f.uri).catch(() =>
-                          Alert.alert('File', f.name)
-                        )
-                      }
+                      onPress={() => setViewingFile(f)}
                       style={styles.patientFileChip}
                     >
                       <Ionicons
@@ -437,7 +437,10 @@ export default function PatientAppointmentsScreen() {
                           {formatFileSize(f.size)}
                         </Text>
                       ) : null}
-                      <Ionicons name="open-outline" size={11} color="#64748B" />
+                      <View style={styles.fileOpenTag}>
+                        <Ionicons name="eye-outline" size={11} color="#0F766E" />
+                        <Text style={styles.fileOpenTagText}>Open</Text>
+                      </View>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -472,18 +475,6 @@ export default function PatientAppointmentsScreen() {
                 <View style={styles.paidChip}>
                   <Ionicons name="card" size={11} color="#0F766E" />
                   <Text style={styles.paidChipText}>Paid (Stripe)</Text>
-                </View>
-              ) : item.paymentStatus === 'pay_later' || item.paymentMethod === 'pay_later' ? (
-                <View
-                  style={[
-                    styles.paidChip,
-                    { backgroundColor: '#EDE9FE', borderColor: '#DDD6FE' },
-                  ]}
-                >
-                  <Ionicons name="time" size={11} color="#7C3AED" />
-                  <Text style={[styles.paidChipText, { color: '#6D28D9' }]}>
-                    Pay Later
-                  </Text>
                 </View>
               ) : (
                 <View style={styles.unpaidChip}>
@@ -708,6 +699,12 @@ export default function PatientAppointmentsScreen() {
             </View>
           )
         }
+      />
+
+      <FileViewerModal
+        visible={Boolean(viewingFile)}
+        file={viewingFile}
+        onClose={() => setViewingFile(null)}
       />
     </View>
   );
@@ -1077,6 +1074,21 @@ const styles = StyleSheet.create({
   patientFileSize: {
     fontSize: 10,
     color: '#94A3B8',
+  },
+  fileOpenTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 2,
+  },
+  fileOpenTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0F766E',
   },
   bottomActionsRow: {
     flexDirection: 'row',
